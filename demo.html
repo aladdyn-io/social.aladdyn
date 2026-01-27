@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Social Scene Content Generator - Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 40px;
+      }
+
+      .form-section {
+        background: #f7f9fc;
+        padding: 30px;
+        border-radius: 15px;
+        margin-bottom: 30px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      input[type="text"],
+      input[type="number"],
+      select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: border-color 0.3s;
+      }
+
+      input[type="text"]:focus,
+      input[type="number"]:focus,
+      select:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .checkbox-group input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+      }
+
+      .services-input {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .service-item {
+        display: flex;
+        gap: 10px;
+      }
+
+      .service-item input {
+        flex: 1;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 10px;
+        cursor: pointer;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+        width: 100%;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error {
+        background: #fee;
+        border: 2px solid #f88;
+        color: #c33;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+      }
+
+      .results {
+        margin-top: 30px;
+      }
+
+      .summary {
+        background: #e8f5e9;
+        border: 2px solid #4caf50;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+      }
+
+      .summary h3 {
+        color: #2e7d32;
+        margin-bottom: 15px;
+      }
+
+      .summary-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+      }
+
+      .stat {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
+      }
+
+      .stat-label {
+        color: #666;
+        margin-top: 5px;
+      }
+
+      .posts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+      }
+
+      .post-card {
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 15px;
+        overflow: hidden;
+        transition:
+          transform 0.3s,
+          box-shadow 0.3s;
+      }
+
+      .post-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+
+      .post-image {
+        width: 100%;
+        height: 250px;
+        object-fit: cover;
+        background: #f0f0f0;
+      }
+
+      .post-content {
+        padding: 20px;
+      }
+
+      .post-date {
+        color: #999;
+        font-size: 0.9rem;
+        margin-bottom: 10px;
+      }
+
+      .post-caption {
+        color: #333;
+        line-height: 1.6;
+        margin-bottom: 15px;
+      }
+
+      .hashtags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .hashtag {
+        background: #e3f2fd;
+        color: #1976d2;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🎨 Social Scene Generator</h1>
+        <p>AI-Powered Social Media Content Creation</p>
+      </div>
+
+      <div class="content">
+        <div class="form-section">
+          <h2 style="margin-bottom: 20px">Campaign Details</h2>
+
+          <div class="form-group">
+            <label for="industry">Industry / Business Type *</label>
+            <input
+              type="text"
+              id="industry"
+              placeholder="e.g., Coffee Shop, Fitness Studio, Digital Agency"
+              required
+            />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+            <div class="form-group">
+              <label for="total_days">Campaign Duration (days)</label>
+              <input
+                type="number"
+                id="total_days"
+                value="14"
+                min="7"
+                max="90"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="frequency">Posts Per Week</label>
+              <input type="number" id="frequency" value="3" min="1" max="7" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Services Offered *</label>
+            <div class="services-input" id="servicesContainer">
+              <div class="service-item">
+                <input
+                  type="text"
+                  placeholder="Service 1"
+                  class="service-input"
+                />
+              </div>
+              <div class="service-item">
+                <input
+                  type="text"
+                  placeholder="Service 2"
+                  class="service-input"
+                />
+              </div>
+              <div class="service-item">
+                <input
+                  type="text"
+                  placeholder="Service 3"
+                  class="service-input"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="geography">Geography</label>
+            <select id="geography">
+              <option value="India">India</option>
+              <option value="USA">USA</option>
+              <option value="UK">UK</option>
+            </select>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="festival_enabled" checked />
+            <label for="festival_enabled" style="margin-bottom: 0"
+              >Include Festival Posts</label
+            >
+          </div>
+
+          <button class="btn" onclick="generateContent()">
+            🚀 Generate Content
+          </button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none">
+          <div class="spinner"></div>
+          <p style="font-size: 1.2rem; color: #667eea">
+            Generating your content...
+          </p>
+          <p style="color: #999; margin-top: 10px">
+            This may take 30-90 seconds
+          </p>
+        </div>
+
+        <div id="error" class="error" style="display: none"></div>
+
+        <div id="results" class="results" style="display: none">
+          <div class="summary">
+            <h3>✅ Generation Complete!</h3>
+            <div class="summary-stats">
+              <div class="stat">
+                <div class="stat-value" id="totalPosts">0</div>
+                <div class="stat-label">Total Posts</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value" id="strategyPillars">0</div>
+                <div class="stat-label">Content Pillars</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value" id="festivalPosts">0</div>
+                <div class="stat-label">Festival Posts</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value" id="processingTime">0s</div>
+                <div class="stat-label">Processing Time</div>
+              </div>
+            </div>
+          </div>
+
+          <h3 style="margin-bottom: 20px">Generated Posts</h3>
+          <div class="posts-grid" id="postsContainer"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Detect API URL based on current host
+      const currentHost = window.location.hostname;
+      let API_BASE_URL;
+
+      if (currentHost === "localhost" || currentHost === "127.0.0.1") {
+        API_BASE_URL = "http://localhost:3000";
+      } else if (
+        currentHost.startsWith("192.168") ||
+        currentHost.startsWith("10.")
+      ) {
+        // Use same IP but port 3000
+        API_BASE_URL = `http://${currentHost}:3000`;
+      } else {
+        // Fallback
+        API_BASE_URL = "http://localhost:3000";
+      }
+
+      console.log("Current Host:", currentHost);
+      console.log("API Base URL:", API_BASE_URL);
+
+      async function generateContent() {
+        // Get form values
+        const industry = document.getElementById("industry").value.trim();
+        const total_days = parseInt(
+          document.getElementById("total_days").value,
+        );
+        const frequency_per_week = parseInt(
+          document.getElementById("frequency").value,
+        );
+        const geography = document.getElementById("geography").value;
+        const festival_enabled =
+          document.getElementById("festival_enabled").checked;
+
+        // Get services
+        const serviceInputs = document.querySelectorAll(".service-input");
+        const services = Array.from(serviceInputs)
+          .map((input) => input.value.trim())
+          .filter((val) => val !== "");
+
+        // Validate
+        if (!industry) {
+          showError("Please enter your industry/business type");
+          return;
+        }
+
+        if (services.length === 0) {
+          showError("Please enter at least one service");
+          return;
+        }
+
+        // Hide previous results
+        document.getElementById("error").style.display = "none";
+        document.getElementById("results").style.display = "none";
+        document.getElementById("loading").style.display = "block";
+
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/generate-content`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                input: {
+                  industry,
+                  total_days,
+                  frequency_per_week,
+                  festival_enabled,
+                  services,
+                  geography,
+                  logo_url: "https://example.com/logo.png",
+                  font_style: "Roboto",
+                  accent_color: "#667eea",
+                  base_color: "#764ba2",
+                },
+              }),
+            },
+          );
+
+          const data = await response.json();
+
+          if (data.success) {
+            displayResults(data.data);
+          } else {
+            showError(data.error.message);
+          }
+        } catch (error) {
+          console.error("API Error:", error);
+          let errorMessage = `Failed to connect to API: ${error.message}`;
+
+          if (error.message === "Failed to fetch") {
+            errorMessage =
+              `Cannot connect to API server at ${API_BASE_URL}.\n\n` +
+              `Please make sure:\n` +
+              `1. The server is running (npm run dev)\n` +
+              `2. You're accessing the demo from the same machine as the server\n` +
+              `3. Try opening: http://localhost:5500/demo.html instead`;
+          }
+
+          showError(errorMessage);
+        } finally {
+          document.getElementById("loading").style.display = "none";
+        }
+      }
+
+      function displayResults(data) {
+        // Update summary stats
+        document.getElementById("totalPosts").textContent =
+          data.summary.totalPosts;
+        document.getElementById("strategyPillars").textContent =
+          data.summary.strategyPillars;
+        document.getElementById("festivalPosts").textContent =
+          data.summary.festivalPosts;
+        document.getElementById("processingTime").textContent =
+          (data.summary.processingTime / 1000).toFixed(1) + "s";
+
+        // Display posts
+        const postsContainer = document.getElementById("postsContainer");
+        postsContainer.innerHTML = "";
+
+        data.output.posts.forEach((post, index) => {
+          const postCard = document.createElement("div");
+          postCard.className = "post-card";
+
+          postCard.innerHTML = `
+          <img src="${post.imageUrl}" alt="Generated post ${index + 1}" class="post-image" />
+          <div class="post-content">
+            <div class="post-date">Post ${index + 1} • ${formatDate(post.scheduledDate)}</div>
+            <div class="post-caption">${post.caption}</div>
+            <div class="hashtags">
+              ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
+            </div>
+          </div>
+        `;
+
+          postsContainer.appendChild(postCard);
+        });
+
+        document.getElementById("results").style.display = "block";
+
+        // Scroll to results
+        document
+          .getElementById("results")
+          .scrollIntoView({ behavior: "smooth" });
+      }
+
+      function showError(message) {
+        const errorDiv = document.getElementById("error");
+        errorDiv.innerHTML = `<strong>Error:</strong><br>${message.replace(/\n/g, "<br>")}`;
+        errorDiv.style.display = "block";
+        errorDiv.scrollIntoView({ behavior: "smooth" });
+      }
+
+      // Test API connection on page load
+      window.addEventListener("load", async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/health`, {
+            method: "GET",
+          });
+          if (response.ok) {
+            console.log("✓ API connection successful");
+          } else {
+            console.warn(
+              "⚠ API responded but with error status:",
+              response.status,
+            );
+          }
+        } catch (error) {
+          console.error("✗ Cannot connect to API:", error.message);
+          console.log("Make sure the server is running: npm run dev");
+        }
+      });
+
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+    </script>
+  </body>
+</html>

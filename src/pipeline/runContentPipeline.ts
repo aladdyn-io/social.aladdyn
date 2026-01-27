@@ -10,6 +10,7 @@ import { normalizeInput } from '../services/normalizeInput';
 import { generateStrategy } from '../services/generateStrategy';
 import { generateCalendar } from '../services/generateCalendar';
 import { generatePosts } from '../services/generatePosts';
+import { savePostsToDB } from '../db/database';
 
 /**
  * Runs the complete content generation pipeline
@@ -19,14 +20,37 @@ import { generatePosts } from '../services/generatePosts';
  * 2. Generate content strategy (AI)
  * 3. Build content calendar (rule-based)
  * 4. Generate posts with captions and images (AI)
- * 5. Return complete output
+ * 5. Save posts to database (if campaignId provided)
+ * 6. Return complete output
  * 
  * @param input - Raw content input from database
+ * @param campaignId - Optional campaign UUID to save posts
  * @returns Complete content output with strategy, calendar, and posts
  * @throws Error if any step fails critically
  */
+/**
+ * Maps geography string to ISO country code
+ */
+function getCountryCode(geography: string): string {
+  const mapping: Record<string, string> = {
+    india: 'IN',
+    'united states': 'US',
+    usa: 'US',
+    uk: 'GB',
+    'united kingdom': 'GB',
+    canada: 'CA',
+    australia: 'AU',
+    singapore: 'SG',
+    uae: 'AE',
+    // Add more mappings as needed
+  };
+  
+  return mapping[geography.toLowerCase()] || 'IN'; // Default to India
+}
+
 export async function runContentPipeline(
-  input: ContentInput
+  input: ContentInput,
+  campaignId?: string
 ): Promise<ContentOutput> {
   try {
     // ========================================================================
@@ -48,10 +72,28 @@ export async function runContentPipeline(
     // ========================================================================
     // STEP 3: FETCH FESTIVALS (if enabled)
     // ========================================================================
-    // TODO: Implement festival fetching from Step 5
-    // For now, use empty array
     
-    const festivals: FestivalEvent[] = [];
+    let festivals: FestivalEvent[] = [];
+    
+    if (normalizedInput.festival_enabled) {
+      const { getFestivalsForDateRange } = await import('../services/festivalApi');
+      
+      try {
+        // Calculate date range from normalized input
+        const startDate = new Date(); // Campaign starts today
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + normalizedInput.total_days);
+        
+        // Map geography to country code (basic mapping)
+        const countryCode = getCountryCode(normalizedInput.geography);
+        
+        festivals = await getFestivalsForDateRange(startDate, endDate, countryCode);
+        console.log(`[Pipeline] ✓ Loaded ${festivals.length} festivals`);
+      } catch (error) {
+        console.error('[Pipeline] ⚠ Failed to fetch festivals, continuing without them:', error);
+        // Continue with empty festivals array
+      }
+    }
 
     // ========================================================================
     // STEP 4: GENERATE CONTENT CALENDAR
@@ -70,7 +112,23 @@ export async function runContentPipeline(
     const posts = await generatePosts(calendar, normalizedInput, strategy);
 
     // ========================================================================
-    // STEP 6: RETURN OUTPUT
+    // STEP 6: SAVE POSTS TO DATABASE (if campaignId provided)
+    // ========================================================================
+    
+    if (campaignId) {
+      console.log(`[Pipeline] Saving posts to database for campaign: ${campaignId}`);
+      try {
+        const savedIds = await savePostsToDB(campaignId, posts);
+        console.log(`[Pipeline] ✓ Saved ${savedIds.length} posts to database`);
+      } catch (error) {
+        console.error('[Pipeline] ⚠ Failed to save posts to database:', error);
+        // Don't fail the entire pipeline if database save fails
+        // Posts are still returned in the response
+      }
+    }
+
+    // ========================================================================
+    // STEP 7: RETURN OUTPUT
     // ========================================================================
     
     return {

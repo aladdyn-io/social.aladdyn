@@ -2,13 +2,16 @@
  * Image Generation Service
  * 
  * Adapter-based design for model-agnostic image generation.
- * V1 uses a stub generator that returns placeholders.
+ * Uses HuggingFace Inference API for real AI image generation.
  * 
  * WHY adapter pattern: Allows swapping image generation models
  * (Stable Diffusion, DALL-E, Midjourney, etc.) without changing
  * downstream code.
  */
 
+import axios from 'axios';
+import Replicate from 'replicate';
+import sharp from 'sharp';
 import { CalendarItem } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 
@@ -94,92 +97,434 @@ export interface ImageGenerator {
 }
 
 // ============================================================================
-// STUB IMPLEMENTATION (V1)
+// LOCAL/MOCK IMPLEMENTATION
 // ============================================================================
 
 /**
- * StubImageGenerator - Placeholder generator for V1
+ * LocalGenerator - Generates placeholder images locally using Sharp
  * 
- * WHY: Allows testing entire pipeline without real image generation
- * WHY: Returns placeholder images that can be uploaded and displayed
+ * WHY: No API keys needed, works offline, instant generation
+ * WHY: Great for development and testing
  */
-class StubImageGenerator implements ImageGenerator {
+class LocalGenerator implements ImageGenerator {
   async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
-    // TODO: In production, this would call:
-    // - Stable Diffusion API
-    // - DALL-E API
-    // - SDXL local model
-    // - Or any other image generation service
+    console.log(`[ImageGenerator] Generating placeholder image locally...`);
+    console.log(`[ImageGenerator] Topic: ${prompt.topic}`);
 
-    // Log what the prompt WOULD be for a real model
-    const fullPrompt = this.buildModelPrompt(prompt);
-    console.log('[ImageGenerator] STUB: Would generate image with prompt:', fullPrompt);
+    try {
+      // Create a gradient background based on brand colors
+      const width = 1024;
+      const height = 1024;
 
-    // Generate a simple placeholder image buffer
-    // WHY: Real buffer allows testing upload pipeline
-    const placeholderBuffer = this.generatePlaceholder(prompt);
+      // Parse hex colors to RGB
+      const baseColor = this.hexToRgb(prompt.brandColors.base);
+      const accentColor = this.hexToRgb(prompt.brandColors.accent);
 
-    return {
-      imageBuffer: placeholderBuffer,
-      metadata: {
-        model: 'stub-v1',
-        dimensions: {
-          width: 1024,
-          height: 1024,
+      // Create gradient image using sharp
+      const svg = `
+        <svg width="${width}" height="${height}">
+          <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:${prompt.brandColors.base};stop-opacity:1" />
+              <stop offset="100%" style="stop-color:${prompt.brandColors.accent};stop-opacity:1" />
+            </linearGradient>
+          </defs>
+          <rect width="${width}" height="${height}" fill="url(#grad1)" />
+          
+          <!-- Add text overlay -->
+          <text x="50%" y="45%" text-anchor="middle" font-family="Arial, sans-serif" font-size="60" font-weight="bold" fill="white" stroke="rgba(0,0,0,0.3)" stroke-width="2">
+            ${this.escapeXml(prompt.industry)}
+          </text>
+          <text x="50%" y="55%" text-anchor="middle" font-family="Arial, sans-serif" font-size="40" fill="white" opacity="0.9">
+            ${this.escapeXml(prompt.pillar)}
+          </text>
+          ${prompt.isFestival ? `
+          <text x="50%" y="65%" text-anchor="middle" font-family="Arial, sans-serif" font-size="35" fill="white" opacity="0.8">
+            🎉 ${this.escapeXml(prompt.festivalName || '')}
+          </text>
+          ` : ''}
+        </svg>
+      `;
+
+      const imageBuffer = await sharp(Buffer.from(svg))
+        .png()
+        .toBuffer();
+
+      console.log(`[ImageGenerator] ✓ Generated placeholder (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
+
+      return {
+        imageBuffer,
+        metadata: {
+          model: 'local-placeholder',
+          dimensions: {
+            width,
+            height,
+          },
+          prompt: `${prompt.industry} - ${prompt.pillar}${prompt.isFestival ? ` - ${prompt.festivalName}` : ''}`,
         },
-        prompt: fullPrompt,
-      },
-    };
+      };
+    } catch (error: any) {
+      console.error('[ImageGenerator] ✗ Local generation failed:', error.message);
+      throw new Error(`Local image generation error: ${error.message}`);
+    }
   }
 
-  /**
-   * Builds prompt string that WOULD be sent to a real model
-   * 
-   * WHY: Documents prompt engineering strategy for future implementation
-   */
-  private buildModelPrompt(prompt: ImagePrompt): string {
-    if (prompt.isFestival) {
-      // Festival post prompt
-      return `Professional social media image for ${prompt.festivalName}, ${prompt.industry} business, celebration theme, vibrant festive colors, modern design, high quality, 4k`;
-    } else {
-      // Regular post prompt
-      return `Professional social media image for ${prompt.industry}, ${prompt.pillar} content, modern design, ${prompt.brandColors.accent} accent color, clean composition, high quality, 4k`;
+  private hexToRgb(hex: string): { r: number; g: number; b: number } {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+      ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16),
+        }
+      : { r: 100, g: 100, b: 100 };
+  }
+
+  private escapeXml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+}
+
+// ============================================================================
+// DEEPAI IMPLEMENTATION
+// ============================================================================
+
+/**
+ * DeepAIGenerator - AI image generation using DeepAI API
+ * 
+ * API: text2img
+ * WHY: Simple API, free tier available, reliable service
+ */
+class DeepAIGenerator implements ImageGenerator {
+  private readonly apiKey: string;
+  private readonly endpoint = 'https://api.deepai.org/api/text2img';
+
+  constructor() {
+    const key = process.env.DEEPAI_API_KEY;
+    if (!key) {
+      throw new Error('DEEPAI_API_KEY environment variable is required');
+    }
+    this.apiKey = key;
+  }
+
+  async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
+    const fullPrompt = this.buildModelPrompt(prompt);
+    
+    console.log(`[ImageGenerator] Generating with DeepAI...`);
+    console.log(`[ImageGenerator] Prompt: ${fullPrompt.substring(0, 100)}...`);
+
+    try {
+      const response = await axios.post(
+        this.endpoint,
+        { text: fullPrompt },
+        {
+          headers: {
+            'api-key': this.apiKey,
+            'Content-Type': 'application/json',
+          },
+          timeout: 90000,
+        }
+      );
+
+      // DeepAI returns JSON with output_url
+      const imageUrl = response.data.output_url;
+      
+      if (!imageUrl) {
+        throw new Error('DeepAI returned no image URL');
+      }
+
+      // Download the image
+      console.log(`[ImageGenerator] Downloading from ${imageUrl}...`);
+      const imageResponse = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+
+      const imageBuffer = Buffer.from(imageResponse.data);
+      
+      console.log(`[ImageGenerator] ✓ Generated image (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
+
+      return {
+        imageBuffer,
+        metadata: {
+          model: 'deepai-text2img',
+          dimensions: {
+            width: 512,
+            height: 512,
+          },
+          prompt: fullPrompt,
+        },
+      };
+    } catch (error: any) {
+      console.error('[ImageGenerator] ✗ Generation failed:', error.message);
+
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        throw new Error(
+          'Invalid DeepAI API key. Check DEEPAI_API_KEY environment variable.'
+        );
+      }
+
+      if (error.response?.status === 429) {
+        throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+      }
+
+      if (error.response?.data) {
+        throw new Error(
+          `DeepAI API error: ${JSON.stringify(error.response.data)}`
+        );
+      }
+
+      throw new Error(
+        `DeepAI API error: ${error.message}`
+      );
     }
   }
 
   /**
-   * Generates a simple placeholder image buffer
-   * 
-   * WHY: Returns actual image data for testing upload pipeline
-   * WHY: Small colored square is enough for V1
+   * Builds prompt for DeepAI model
    */
-  private generatePlaceholder(prompt: ImagePrompt): Buffer {
-    // Create a simple 1024x1024 PNG placeholder
-    // WHY: PNG header + colored square is minimal but valid image
-    
-    // For V1, return a minimal valid PNG buffer
-    // In production, this would be the actual generated image
-    
-    // Simple 1x1 pixel PNG (smallest valid PNG)
-    // WHY: Minimal size, still uploadable and displayable
-    const pngHeader = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
-      0x00, 0x00, 0x00, 0x0d, // IHDR chunk length
-      0x49, 0x48, 0x44, 0x52, // "IHDR"
-      0x00, 0x00, 0x00, 0x01, // Width: 1
-      0x00, 0x00, 0x00, 0x01, // Height: 1
-      0x08, 0x02, 0x00, 0x00, 0x00, // Bit depth: 8, Color type: 2 (RGB), compression, filter, interlace
-      0x90, 0x77, 0x53, 0xde, // CRC
-      0x00, 0x00, 0x00, 0x0c, // IDAT chunk length
-      0x49, 0x44, 0x41, 0x54, // "IDAT"
-      0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, // Image data (red pixel)
-      0x18, 0xdd, 0x8d, 0xb4, // CRC
-      0x00, 0x00, 0x00, 0x00, // IEND chunk length
-      0x49, 0x45, 0x4e, 0x44, // "IEND"
-      0xae, 0x42, 0x60, 0x82, // CRC
-    ]);
+  private buildModelPrompt(prompt: ImagePrompt): string {
+    const baseStyle = 'professional social media post design, modern aesthetic, high quality, vibrant colors, clean layout, eye-catching';
 
-    return pngHeader;
+    if (prompt.isFestival) {
+      return `${prompt.festivalName} celebration image for ${prompt.industry} business, festive theme, ${prompt.festivalName} decorations, celebratory atmosphere, ${baseStyle}`;
+    } else {
+      return `${prompt.industry} business, ${prompt.pillar} content theme, ${prompt.topic}, ${baseStyle}, ${prompt.brandColors.accent} color accent`;
+    }
+  }
+}
+
+// ============================================================================
+// REPLICATE IMPLEMENTATION
+// ============================================================================
+
+/**
+ * ReplicateGenerator - AI image generation using Replicate API
+ * 
+ * Model: black-forest-labs/flux-schnell
+ * WHY: Replicate has reliable API, good free tier, FLUX model available
+ */
+class ReplicateGenerator implements ImageGenerator {
+  private readonly replicate: Replicate;
+  private readonly model = 'black-forest-labs/flux-schnell';
+
+  constructor() {
+    const token = process.env.REPLICATE_API_TOKEN;
+    if (!token) {
+      throw new Error('REPLICATE_API_TOKEN environment variable is required');
+    }
+    this.replicate = new Replicate({
+      auth: token,
+    });
+  }
+
+  async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
+    const fullPrompt = this.buildModelPrompt(prompt);
+    
+    console.log(`[ImageGenerator] Generating with Replicate (${this.model})...`);
+    console.log(`[ImageGenerator] Prompt: ${fullPrompt.substring(0, 100)}...`);
+
+    try {
+      const output: any = await this.replicate.run(
+        this.model as any,
+        {
+          input: {
+            prompt: fullPrompt,
+            num_outputs: 1,
+            aspect_ratio: '1:1',
+            output_format: 'png',
+            output_quality: 80,
+          },
+        }
+      );
+
+      // Replicate returns an array of URLs
+      const imageUrl = Array.isArray(output) ? output[0] : output;
+      
+      if (!imageUrl) {
+        throw new Error('Replicate returned no image URL');
+      }
+
+      // Download the image
+      console.log(`[ImageGenerator] Downloading from ${imageUrl}...`);
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+
+      const imageBuffer = Buffer.from(response.data);
+      
+      console.log(`[ImageGenerator] ✓ Generated image (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
+
+      return {
+        imageBuffer,
+        metadata: {
+          model: this.model,
+          dimensions: {
+            width: 1024,
+            height: 1024,
+          },
+          prompt: fullPrompt,
+        },
+      };
+    } catch (error: any) {
+      console.error('[ImageGenerator] ✗ Generation failed:', error.message);
+
+      if (error.response?.status === 401) {
+        throw new Error(
+          'Invalid Replicate API token. Check REPLICATE_API_TOKEN environment variable.'
+        );
+      }
+
+      if (error.response?.status === 402) {
+        throw new Error('Replicate API credit exhausted. Please add credits to your account.');
+      }
+
+      if (error.response?.status === 429) {
+        throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+      }
+
+      throw new Error(
+        `Replicate API error: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Builds optimized prompt for FLUX model
+   * 
+   * WHY: FLUX models work best with clear, descriptive prompts
+   */
+  private buildModelPrompt(prompt: ImagePrompt): string {
+    const baseStyle = 'professional social media post design, modern aesthetic, high quality, vibrant colors, clean layout, eye-catching';
+
+    if (prompt.isFestival) {
+      return `${prompt.festivalName} celebration image for ${prompt.industry} business, festive theme, ${prompt.festivalName} decorations, celebratory atmosphere, ${baseStyle}`;
+    } else {
+      return `${prompt.industry} business, ${prompt.pillar} content theme, ${prompt.topic}, ${baseStyle}, ${prompt.brandColors.accent} color accent`;
+    }
+  }
+}
+
+// ============================================================================
+// HUGGINGFACE IMPLEMENTATION
+// ============================================================================
+
+/**
+ * HuggingFaceGenerator - Real AI image generation using HuggingFace API
+ * 
+ * Model: XLabs-AI/flux-RealismLora
+ * WHY: Community FLUX model available on free tier
+ */
+class HuggingFaceGenerator implements ImageGenerator {
+  private readonly apiToken: string;
+  private readonly model = 'XLabs-AI/flux-RealismLora';
+
+  constructor() {
+    const token = process.env.HUGGINGFACE_API_TOKEN;
+    if (!token) {
+      throw new Error('HUGGINGFACE_API_TOKEN environment variable is required');
+    }
+    this.apiToken = token;
+  }
+
+  async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
+    const fullPrompt = this.buildModelPrompt(prompt);
+    
+    console.log(`[ImageGenerator] Generating with HuggingFace (${this.model})...`);
+    console.log(`[ImageGenerator] Prompt: ${fullPrompt.substring(0, 100)}...`);
+
+    try {
+      const response = await axios.post(
+        `https://api-inference.huggingface.co/models/${this.model}`,
+        {
+          inputs: fullPrompt,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          responseType: 'arraybuffer',
+          timeout: 90000, // 90 second timeout
+        }
+      );
+
+      const imageBuffer = Buffer.from(response.data);
+      
+      if (imageBuffer.length < 1000) {
+        // Likely an error message, not an image
+        const errorText = imageBuffer.toString('utf-8');
+        throw new Error(`HuggingFace returned invalid response: ${errorText}`);
+      }
+      
+      console.log(`[ImageGenerator] ✓ Generated image (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
+
+      return {
+        imageBuffer,
+        metadata: {
+          model: this.model,
+          dimensions: {
+            width: 1024,  // FLUX.1-schnell default size
+            height: 1024,
+          },
+          prompt: fullPrompt,
+        },
+      };
+    } catch (error: any) {
+      console.error('[ImageGenerator] ✗ Generation failed:', error.message);
+
+      // Handle specific HuggingFace errors
+      if (error.response?.status === 503) {
+        throw new Error(
+          'HuggingFace model is loading. Please wait 20-30 seconds and try again.'
+        );
+      }
+
+      if (error.response?.status === 401) {
+        throw new Error(
+          'Invalid HuggingFace API token. Check HUGGINGFACE_API_TOKEN environment variable.'
+        );
+      }
+      
+      if (error.response?.status === 410) {
+        throw new Error(
+          `Model ${this.model} is no longer available. Please update to a different model.`
+        );
+      }
+
+      if (error.response?.status === 429) {
+        throw new Error('Rate limit exceeded. Please wait a moment and try again.');
+      }
+
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Image generation timeout. The model may be too slow or unavailable.');
+      }
+
+      throw new Error(
+        `HuggingFace API error: ${error.response?.data?.error || error.message}`
+      );
+    }
+  }
+
+  /**
+   * Builds optimized prompt for FLUX model
+   * 
+   * WHY: FLUX models work best with clear, descriptive prompts
+   */
+  private buildModelPrompt(prompt: ImagePrompt): string {
+    const baseStyle = 'professional social media post design, modern aesthetic, high quality, vibrant colors, clean layout, eye-catching';
+
+    if (prompt.isFestival) {
+      return `${prompt.festivalName} celebration image for ${prompt.industry} business, festive theme, ${prompt.festivalName} decorations, celebratory atmosphere, ${baseStyle}`;
+    } else {
+      return `${prompt.industry} business, ${prompt.pillar} content theme, ${prompt.topic}, ${baseStyle}, ${prompt.brandColors.accent} color accent`;
+    }
   }
 }
 
@@ -215,61 +560,25 @@ export async function generateImage(
     festivalName: calendarItem.festival_name,
   };
 
-  // Use stub generator for V1
-  // TODO: In future versions, select generator based on config:
-  // - new StableDiffusionGenerator()
-  // - new DALLEGenerator()
-  // - new SDXLGenerator()
-  const generator: ImageGenerator = new StubImageGenerator();
+  // Select generator based on environment variable
+  const imageProvider = process.env.IMAGE_PROVIDER || 'local';
+  
+  let generator: ImageGenerator;
+  
+  if (imageProvider === 'local') {
+    generator = new LocalGenerator();
+  } else if (imageProvider === 'deepai') {
+    generator = new DeepAIGenerator();
+  } else if (imageProvider === 'replicate') {
+    generator = new ReplicateGenerator();
+  } else if (imageProvider === 'huggingface') {
+    generator = new HuggingFaceGenerator();
+  } else {
+    throw new Error(`Unsupported IMAGE_PROVIDER: ${imageProvider}. Use 'local', 'deepai', 'replicate', or 'huggingface'`);
+  }
 
   // Generate image
   const result = await generator.generate(prompt);
 
   return result;
 }
-
-// ============================================================================
-// FUTURE GENERATOR EXAMPLES (COMMENTED OUT)
-// ============================================================================
-
-/*
-// Example: Real Stable Diffusion implementation
-class StableDiffusionGenerator implements ImageGenerator {
-  async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
-    const sdPrompt = this.buildSDPrompt(prompt);
-    
-    // Call Stable Diffusion API
-    const response = await axios.post('http://localhost:7860/sdapi/v1/txt2img', {
-      prompt: sdPrompt,
-      negative_prompt: 'low quality, blurry, text, watermark',
-      width: 1024,
-      height: 1024,
-      steps: 30,
-    });
-
-    const imageBuffer = Buffer.from(response.data.images[0], 'base64');
-
-    return {
-      imageBuffer,
-      metadata: {
-        model: 'stable-diffusion-xl',
-        dimensions: { width: 1024, height: 1024 },
-        prompt: sdPrompt,
-      },
-    };
-  }
-
-  private buildSDPrompt(prompt: ImagePrompt): string {
-    // Stable Diffusion-specific prompt engineering
-    return `...`;
-  }
-}
-
-// Example: DALL-E implementation
-class DALLEGenerator implements ImageGenerator {
-  async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
-    // Call OpenAI DALL-E API
-    // ...
-  }
-}
-*/

@@ -1,0 +1,14 @@
+{
+  "input": {
+    "industry": "Fitness",
+    "total_days": 7,
+    "frequency_per_week": 2,
+    "festival_enabled": false,
+    "logo_url": "https://example.com/logo.png",
+    "font_style": "Roboto",
+    "accent_color": "#FF6B35",
+    "base_color": "#004E89",
+    "services": ["Personal Training"],
+    "geography": "India"
+  }
+}

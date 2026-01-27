@@ -1,6 +1,23 @@
-# Social Scene - Content Generation Backend V1
+# Social Scene - Content Generation Backend V2
 
-AI-powered content generation backend for social media campaigns.
+AI-powered content generation backend for social media campaigns with REST API.
+
+## 🚀 Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Start API server
+npm run dev
+
+# Test the API
+node simple-test.js
+```
+
+Server runs on `http://localhost:3000`
+
+**See [QUICKSTART.md](QUICKSTART.md) and [API_DOCS.md](API_DOCS.md) for details.**
 
 ## Architecture
 
@@ -88,13 +105,43 @@ Required configuration:
 ### 3. Run
 
 ```bash
-# Development
+# Development (API Server)
 npm run dev
 
 # Production
 npm run build
 npm start
+
+# CLI mode (original)
+npm run dev:cli
 ```
+
+## API Endpoints
+
+### Health Check
+
+```bash
+GET /health
+```
+
+### Generate Content
+
+```bash
+POST /api/v1/generate-content
+Content-Type: application/json
+
+{
+  "input": {
+    "industry": "Coffee Shop",
+    "total_days": 7,
+    "frequency_per_week": 2,
+    "services": ["Specialty Coffee", "Pastries"],
+    "geography": "India"
+  }
+}
+```
+
+See [API_DOCS.md](API_DOCS.md) for complete API reference.
 
 ## Module Details
 
@@ -160,6 +207,10 @@ All module interfaces are defined in `types.ts`. Key types:
 - [x] Main pipeline orchestration
 - [x] All module stubs with clear TODOs
 - [x] Configuration setup
+- [x] **Express REST API server**
+- [x] **API documentation**
+- [x] **Error handling middleware**
+- [x] **Test endpoints and scripts**
 
 ### 🚧 TODO
 

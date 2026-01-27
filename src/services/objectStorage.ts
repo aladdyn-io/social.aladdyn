@@ -44,45 +44,60 @@ export async function uploadImageToStorage(
   prefix: string = 'posts/'
 ): Promise<string> {
   // ============================================================================
-  // V1: SKIP REAL UPLOAD - RETURN MOCK URL
+  // OPTION 1: Try real upload if credentials exist, fallback to placeholder
   // ============================================================================
-  // WHY: MinIO endpoint configuration needs to be verified in production
-  // WHY: Allows testing complete pipeline without storage dependency
   
-  const mockImageId = uuidv4();
-  const mockUrl = publicEndpoint 
-    ? `${publicEndpoint}/${bucketName}/${prefix}${mockImageId}.png`
-    : `http://localhost:9000/${bucketName}/${prefix}${mockImageId}.png`;
-  
-  console.log(`[ObjectStorage] ✓ Mock upload (V1): ${mockUrl}`);
-  return mockUrl;
+  const hasMinioCredentials = 
+    process.env.MINIO_ACCESS_KEY && 
+    process.env.MINIO_SECRET_KEY &&
+    process.env.MINIO_ENDPOINT;
 
-  // ============================================================================
-  // PRODUCTION CODE (COMMENTED OUT FOR V1)
-  // ============================================================================
-  /*
-  // Validate configuration
-  if (!process.env.MINIO_ACCESS_KEY || !process.env.MINIO_SECRET_KEY) {
-    throw new Error('MinIO credentials not configured. Check MINIO_ACCESS_KEY and MINIO_SECRET_KEY.');
+  if (hasMinioCredentials) {
+    try {
+      return await uploadToMinIO(image, prefix);
+    } catch (error) {
+      console.warn('[ObjectStorage] ⚠ MinIO upload failed, using placeholder:', error);
+      return generatePlaceholderUrl(image);
+    }
+  } else {
+    // No credentials - use placeholder
+    console.log('[ObjectStorage] ⚠ MinIO not configured, using placeholder image');
+    return generatePlaceholderUrl(image);
   }
+}
 
-  // Generate unique object key
-  // WHY: UUID prevents conflicts, timestamp helps with debugging
-  const timestamp = Date.now();
-  const uniqueId = uuidv4();
-  const objectKey = `${prefix}${timestamp}-${uniqueId}.png`;
+/**
+ * Generates a working placeholder image URL
+ * Uses a reliable public CDN service
+ */
+function generatePlaceholderUrl(image: ImageGenerationResult): string {
+  // Use picsum.photos for reliable placeholder images
+  // WHY: Always available, no 502 errors, good for demos
+  const seed = Math.random().toString(36).substring(7);
+  return `https://picsum.photos/seed/${seed}/1024/1024`;
+}
 
+/**
+ * Actual MinIO upload implementation
+ */
+async function uploadToMinIO(
+  image: ImageGenerationResult,
+  prefix: string = 'posts/'
+): Promise<string> {
   try {
     // Ensure bucket exists
-    // WHY: Auto-create bucket if missing (safe for first-time setup)
     const bucketExists = await minioClient.bucketExists(bucketName);
     if (!bucketExists) {
       await minioClient.makeBucket(bucketName, 'us-east-1');
       console.log(`[ObjectStorage] Created bucket: ${bucketName}`);
     }
 
+    // Generate unique object key
+    const timestamp = Date.now();
+    const uniqueId = uuidv4();
+    const objectKey = `${prefix}${timestamp}-${uniqueId}.png`;
+
     // Upload image buffer
-    // WHY: putObject accepts Buffer directly, no need for streams
     await minioClient.putObject(
       bucketName,
       objectKey,
@@ -90,24 +105,24 @@ export async function uploadImageToStorage(
       image.imageBuffer.length,
       {
         'Content-Type': 'image/png',
-        'x-amz-acl': 'public-read', // WHY: Images need to be publicly accessible
+        'x-amz-acl': 'public-read',
       }
     );
 
     // Build public URL
     const imageUrl = buildPublicUrl(objectKey);
 
-    console.log(`[ObjectStorage] ✓ Image uploaded: ${imageUrl}`);
+    console.log(`[ObjectStorage] ✓ Image uploaded to MinIO: ${imageUrl}`);
 
     return imageUrl;
   } catch (error) {
-    console.error('[ObjectStorage] ✗ Upload failed:', error);
+    console.error('[ObjectStorage] ✗ MinIO upload failed:', error);
     throw new Error(
-      `Failed to upload image: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to upload to MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
-  */
 }
+
 
 /**
  * Builds public URL for an uploaded object

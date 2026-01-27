@@ -86,7 +86,12 @@ export async function generatePosts(
       console.log(`  ✓ Post complete for ${entry.date}`);
     } catch (error) {
       failureCount++;
-      console.error(`  ✗ Failed to generate post for ${entry.date}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : 'No stack trace';
+      
+      console.error(`  ✗ Failed to generate post for ${entry.date}:`);
+      console.error(`     Error: ${errorMessage}`);
+      console.error(`     Stack: ${errorStack}`);
       
       // WHY: Continue with other posts - don't fail entire pipeline
       // TODO: In production, might want to collect errors and return partial results
