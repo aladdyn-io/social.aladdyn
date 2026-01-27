@@ -19,7 +19,14 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20, // Maximum pool size
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000, // 10 seconds to establish connection
+  statement_timeout: 30000, // 30 seconds for queries to complete
+  query_timeout: 30000, // 30 seconds query timeout
+});
+
+// Test connection on startup
+pool.on('error', (err) => {
+  console.error('[Database] Unexpected pool error:', err);
 });
 
 // ============================================================================
@@ -85,6 +92,86 @@ export async function getCampaignFromDB(
       `Database query failed: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+}
+
+/**
+ * Saves a new campaign to database
+ * 
+ * @param campaignId - Campaign UUID
+ * @param input - Campaign input data
+ * @returns The saved campaign ID
+ */
+export async function saveCampaignToDB(
+  campaignId: string,
+  input: DatabaseInput
+): Promise<string> {
+  console.log(`[Database] Saving campaign: ${campaignId}`);
+
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const query = `
+        INSERT INTO campaigns (
+          campaign_id,
+          industry,
+          total_days,
+          frequency_per_week,
+          festival_enabled,
+          logo_url,
+          font_style,
+          accent_color,
+          base_color,
+          services,
+          geography
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+        )
+        ON CONFLICT (campaign_id) DO NOTHING
+        RETURNING campaign_id
+      `;
+
+      const values = [
+        campaignId,
+        input.industry,
+        input.total_days,
+        input.frequency_per_week,
+        input.festival_enabled,
+        input.logo_url,
+        input.font_style,
+        input.accent_color,
+        input.base_color,
+        input.services,
+        input.geography,
+      ];
+
+      const result = await pool.query(query, values);
+      
+      // If ON CONFLICT occurred, result.rows will be empty
+      if (result.rows.length === 0) {
+        console.log(`[Database] ⚠ Campaign ${campaignId} already exists, skipping insert`);
+      } else {
+        console.log(`[Database] ✓ Campaign saved: ${campaignId}`);
+      }
+      
+      return campaignId;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`[Database] ✗ Save campaign attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+      
+      if (attempt < maxRetries) {
+        // Wait before retrying (exponential backoff)
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`[Database] Retrying in ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+  }
+
+  throw new Error(
+    `Failed to save campaign after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
+  );
 }
 
 // ============================================================================
@@ -267,6 +354,38 @@ export async function getPostsByDate(
     console.error('[Database] ✗ Query failed:', error);
     throw new Error(
       `Failed to fetch posts by date: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Gets a single post by ID
+ * 
+ * @param postId - Post UUID
+ * @returns Post data or null if not found
+ */
+export async function getPostById(postId: string): Promise<any | null> {
+  console.log(`[Database] Fetching post: ${postId}`);
+
+  try {
+    const query = `
+      SELECT * FROM posts
+      WHERE post_id = $1
+    `;
+
+    const result = await pool.query(query, [postId]);
+
+    if (result.rows.length === 0) {
+      console.log(`[Database] Post not found: ${postId}`);
+      return null;
+    }
+
+    console.log(`[Database] ✓ Post fetched successfully`);
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Database] ✗ Fetch failed:', error);
+    throw new Error(
+      `Failed to fetch post: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }

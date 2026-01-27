@@ -91,6 +91,7 @@ export interface JobStatusResponse {
  * Successful content generation response
  */
 export interface GenerateContentResponse {
+  campaign_id?: string; // Campaign ID if posts were saved to database
   output: ContentOutput;
   summary: {
     totalPosts: number;
@@ -99,6 +100,7 @@ export interface GenerateContentResponse {
     festivalPosts: number;
     processingTime: number;
   };
+  warning?: string;
 }
 
 /**
