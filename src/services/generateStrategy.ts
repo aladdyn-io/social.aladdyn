@@ -8,24 +8,42 @@
 import { Strategy } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import OpenAI from 'openai';
+import cache, { CacheTTL, CacheKey } from './cache';
+import { geminiClient } from '../utils/geminiAdapter';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Use Gemini if configured, otherwise use OpenAI
+const llmClient = process.env.LLM_PROVIDER === 'gemini' 
+  ? geminiClient 
+  : new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
 
 /**
- * Generates content strategy using LLM
+ * Generates content strategy using LLM with caching
  * 
  * WHY: Content strategy requires creative, context-aware decision making
  * WHY: AI can analyze industry + brand stage + geography to create balanced strategy
  * WHY: Validates response to ensure downstream modules get clean data
+ * WHY: Caches results to avoid regenerating for same inputs (1 hour TTL)
  * 
  * @param input - Normalized campaign input
  * @returns AI-generated content strategy
  * @throws Error if LLM call fails or returns invalid data after retry
  */
 export async function generateStrategy(input: NormalizedInput): Promise<Strategy> {
+  // Generate cache key from input characteristics
+  const cacheKey = `strategy:${input.industry}:${input.brand_stage}:${input.geography}`;
+  
+  // Check cache first
+  const cached = cache.get<Strategy>(cacheKey);
+  if (cached) {
+    console.log(`[Strategy] ✓ Cache hit for ${input.industry}/${input.brand_stage}/${input.geography}`);
+    return cached;
+  }
+
+  console.log(`[Strategy] ✗ Cache miss, generating new strategy...`);
+
   // Try to generate strategy (with one retry on JSON parse failure)
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -35,6 +53,11 @@ export async function generateStrategy(input: NormalizedInput): Promise<Strategy
       // console.log('Raw AI response:', rawResponse);
 
       const strategy = parseAndValidate(rawResponse);
+      
+      // Cache the generated strategy (1 hour TTL)
+      cache.set(cacheKey, strategy, CacheTTL.STRATEGY);
+      console.log(`[Strategy] ✓ Cached strategy for ${input.industry}/${input.brand_stage}/${input.geography}`);
+      
       return strategy;
     } catch (error) {
       if (attempt === 2) {
@@ -60,7 +83,7 @@ export async function generateStrategy(input: NormalizedInput): Promise<Strategy
 async function callLLM(input: NormalizedInput): Promise<string> {
   const prompt = buildPrompt(input);
 
-  const completion = await openai.chat.completions.create({
+  const completion = await llmClient.chat.completions.create({
     model: process.env.LLM_MODEL || 'gpt-4-turbo-preview',
     messages: [
       {
@@ -89,9 +112,38 @@ async function callLLM(input: NormalizedInput): Promise<string> {
  * Builds prompt for LLM
  * 
  * WHY: Industry, geography, and brand stage should influence strategy
+ * WHY: Campaign goal determines content approach (awareness vs conversion)
+ * WHY: Campaign duration determines if temporal phases are needed
  * WHY: Clear structure helps LLM return consistent format
  */
 function buildPrompt(input: NormalizedInput): string {
+  const campaignGoal = input.campaign_goal || 'awareness';
+  const needsPhases = input.total_days >= 14; // Campaigns 2+ weeks get temporal phases
+
+  let phaseGuidance = '';
+  if (needsPhases) {
+    phaseGuidance = `
+
+IMPORTANT: This is a ${input.total_days}-day campaign. Create 2-3 temporal phases:
+- Early phase (awareness/education focus)
+- Mid phase (consideration/trust focus)  
+- Late phase (conversion/action focus)
+
+For each phase, specify:
+- Day range [startDay, endDay]
+- Phase focus (awareness/consideration/conversion)
+- Content mix override if different from base
+- Strategic guidance
+
+Example phase structure:
+{
+  "dayRange": [1, 7],
+  "focus": "awareness",
+  "contentMixOverride": {"education": 60, "trust": 30, "promotion": 10},
+  "guidance": "Focus on educating audience about problem space"
+}`;
+  }
+
   return `
 Generate a content strategy for a social media campaign with the following context:
 
@@ -101,8 +153,11 @@ Geography: ${input.geography}
 Brand Stage: ${input.brand_stage}
 Platform: ${input.platform}
 Campaign Duration: ${input.total_days} days
+Campaign Goal: ${campaignGoal}
 
-Return a JSON object with this EXACT structure (no additional fields):
+${phaseGuidance}
+
+Return a JSON object with this structure:
 {
   "content_pillars": ["pillar1", "pillar2", "pillar3"],
   "tone": "description of brand tone and voice",
@@ -111,15 +166,28 @@ Return a JSON object with this EXACT structure (no additional fields):
     "education": 30,
     "trust": 50,
     "promotion": 20
-  }
+  }${needsPhases ? `,
+  "campaign_phases": [
+    {
+      "dayRange": [1, 7],
+      "focus": "awareness",
+      "contentMixOverride": {"education": 60, "trust": 30, "promotion": 10},
+      "guidance": "Phase-specific guidance"
+    }
+  ]` : ''}
 }
 
 Requirements:
 - content_pillars: 3-5 themes relevant to ${input.industry}
-- tone: Should match ${input.brand_stage} brand stage
-- cta_style: Appropriate for ${input.geography} audience
+- tone: Should match ${input.brand_stage} brand stage and ${campaignGoal} goal
+- cta_style: Appropriate for ${input.geography} audience and ${campaignGoal} objective
 - content_mix: Percentages MUST sum to exactly 100
-- Consider that this is a ${input.brand_stage} brand in ${input.industry}
+- Consider this is a ${campaignGoal} campaign - adjust strategy accordingly:
+  * awareness: Education-heavy, soft CTAs
+  * consideration: Trust-building, social proof
+  * conversion: Direct CTAs, promotional
+  * retention: Value-add, community-building
+${needsPhases ? `- campaign_phases: Create ${Math.ceil(input.total_days / 7)} phases with clear progression` : ''}
 
 Return ONLY the JSON object, no explanation or markdown.
 `.trim();
@@ -130,6 +198,7 @@ Return ONLY the JSON object, no explanation or markdown.
  * 
  * WHY: LLMs can hallucinate or return malformed data
  * WHY: Percentages must sum to 100 for downstream calendar logic
+ * WHY: Campaign phases must have valid day ranges
  */
 function parseAndValidate(rawResponse: string): Strategy {
   let parsed: any;
@@ -177,6 +246,39 @@ function parseAndValidate(rawResponse: string): Strategy {
     throw new Error(`Invalid strategy: content_mix must sum to 100, got ${sum}`);
   }
 
+  // Validate campaign_phases if present
+  if (parsed.campaign_phases) {
+    if (!Array.isArray(parsed.campaign_phases)) {
+      throw new Error('Invalid strategy: campaign_phases must be an array');
+    }
+
+    for (const phase of parsed.campaign_phases) {
+      if (!phase.dayRange || !Array.isArray(phase.dayRange) || phase.dayRange.length !== 2) {
+        throw new Error('Invalid strategy: phase dayRange must be [startDay, endDay]');
+      }
+
+      if (phase.dayRange[0] < 1 || phase.dayRange[1] < phase.dayRange[0]) {
+        throw new Error('Invalid strategy: phase dayRange has invalid values');
+      }
+
+      if (!phase.focus || typeof phase.focus !== 'string') {
+        throw new Error('Invalid strategy: phase focus must be a string');
+      }
+
+      // Validate contentMixOverride if present
+      if (phase.contentMixOverride) {
+        const { education: e, trust: t, promotion: p } = phase.contentMixOverride;
+        if (typeof e !== 'number' || typeof t !== 'number' || typeof p !== 'number') {
+          throw new Error('Invalid strategy: phase contentMixOverride values must be numbers');
+        }
+        const phaseSum = e + t + p;
+        if (Math.abs(phaseSum - 100) > 0.01) {
+          throw new Error(`Invalid strategy: phase contentMixOverride must sum to 100, got ${phaseSum}`);
+        }
+      }
+    }
+  }
+
   // Return validated strategy
   return {
     content_pillars: parsed.content_pillars,
@@ -187,5 +289,6 @@ function parseAndValidate(rawResponse: string): Strategy {
       trust,
       promotion,
     },
+    campaign_phases: parsed.campaign_phases,
   };
 }

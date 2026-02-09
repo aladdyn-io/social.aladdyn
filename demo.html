@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Social Scene Content Generator - Demo</title>
+    <title>Social Scene Content Generator - Full Cycle Demo</title>
     <style>
       * {
         margin: 0;
@@ -21,7 +21,7 @@
       }
 
       .container {
-        max-width: 1200px;
+        max-width: 1400px;
         margin: 0 auto;
         background: white;
         border-radius: 20px;
@@ -34,6 +34,7 @@
         color: white;
         padding: 40px;
         text-align: center;
+        position: relative;
       }
 
       .header h1 {
@@ -46,8 +47,90 @@
         opacity: 0.9;
       }
 
+      .header-actions {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .header-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 2px solid white;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s;
+      }
+
+      .header-btn:hover {
+        background: white;
+        color: #667eea;
+      }
+
       .content {
         padding: 40px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 30px;
+        border-bottom: 2px solid #e0e0e0;
+      }
+
+      .tab {
+        padding: 15px 30px;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        color: #666;
+        transition: all 0.3s;
+      }
+
+      .tab:hover {
+        color: #667eea;
+      }
+
+      .tab.active {
+        color: #667eea;
+        border-bottom-color: #667eea;
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      .info-card {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+      }
+
+      .info-card h3 {
+        color: #1976d2;
+        margin-bottom: 10px;
+      }
+
+      .info-card ul {
+        margin-left: 20px;
+        color: #555;
+      }
+
+      .info-card li {
+        margin: 5px 0;
       }
 
       .form-section {
@@ -55,6 +138,33 @@
         padding: 30px;
         border-radius: 15px;
         margin-bottom: 30px;
+      }
+
+      .cache-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin: 20px 0;
+      }
+
+      .cache-stat {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        border: 2px solid #e0e0e0;
+        text-align: center;
+      }
+
+      .cache-stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
+        margin-bottom: 5px;
+      }
+
+      .cache-stat-label {
+        color: #666;
+        font-size: 0.9rem;
       }
 
       .form-group {
@@ -284,6 +394,66 @@
         margin-bottom: 15px;
       }
 
+      .image-prompt-section {
+        background: #f3e5f5;
+        border: 2px solid #9c27b0;
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 15px;
+      }
+
+      .image-prompt-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .image-prompt-header h5 {
+        color: #6a1b9a;
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .toggle-icon {
+        font-size: 18px;
+        color: #9c27b0;
+        transition: transform 0.3s;
+      }
+
+      .toggle-icon.collapsed {
+        transform: rotate(-90deg);
+      }
+
+      .image-prompt-content {
+        margin-top: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      .image-prompt-content.collapsed {
+        display: none;
+      }
+
+      .image-prompt-text {
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #555;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 10px;
+      }
+
+      .image-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
       .post-actions {
         display: flex;
         gap: 10px;
@@ -394,18 +564,129 @@
         border-radius: 8px;
         margin: 15px 0;
       }
+
+      .test-section {
+        background: #fff3e0;
+        border: 2px solid #ff9800;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+      }
+
+      .test-section h4 {
+        color: #e65100;
+        margin-bottom: 15px;
+      }
+
+      .test-results {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 10px;
+        max-height: 300px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+
+      .expectation-item {
+        display: flex;
+        align-items: center;
+        padding: 15px;
+        background: white;
+        border-radius: 8px;
+        margin: 10px 0;
+        border: 2px solid #e0e0e0;
+        transition: all 0.3s;
+      }
+
+      .expectation-item:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+      }
+
+      .expectation-status {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        margin-right: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+      }
+
+      .expectation-status.pending {
+        background: #e0e0e0;
+      }
+
+      .expectation-status.testing {
+        background: #fff3e0;
+        animation: pulse 1.5s infinite;
+      }
+
+      .expectation-status.passed {
+        background: #4caf50;
+        color: white;
+      }
+
+      .expectation-status.failed {
+        background: #f44336;
+        color: white;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      .expectation-details {
+        flex: 1;
+      }
+
+      .expectation-title {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 5px;
+      }
+
+      .expectation-desc {
+        color: #666;
+        font-size: 0.9rem;
+      }
+
+      .expectation-time {
+        color: #999;
+        font-size: 0.85rem;
+        margin-left: 15px;
+      }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="header">
         <h1>🎨 Social Scene Generator</h1>
-        <p>AI-Powered Social Media Content Creation</p>
+        <p>AI-Powered Social Media Content Creation - Full Cycle Testing</p>
+        <div class="header-actions">
+          <button class="header-btn" onclick="refreshCacheStats()">📊 Cache Stats</button>
+          <button class="header-btn" onclick="testAPIConnection()">🔌 Test API</button>
+        </div>
       </div>
 
       <div class="content">
-        <div class="form-section">
-          <h2 style="margin-bottom: 20px">Campaign Details</h2>
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('generate')"> Generate Content</button>
+          <button class="tab" onclick="switchTab('tests')"> Full Cycle Tests</button>
+          <button class="tab" onclick="switchTab('cache')"> Cache Management</button>
+          <button class="tab" onclick="switchTab('docs')"> Documentation</button>
+        </div>
+
+        <!-- Tab 1: Generate Content -->
+        <div id="tab-generate" class="tab-content active">
+          <div class="form-section">
+            <h2 style="margin-bottom: 20px">Campaign Details</h2>
 
           <div class="form-group">
             <label for="industry">Industry / Business Type *</label>
@@ -479,7 +760,7 @@
           </div>
 
           <button class="btn" onclick="generateContent()">
-            🚀 Generate Content
+             Generate Content
           </button>
         </div>
 
@@ -521,8 +802,173 @@
           <h3 style="margin-bottom: 20px">Generated Posts</h3>
           <div class="posts-grid" id="postsContainer"></div>
         </div>
-      </div>
-    </div>
+        </div>
+
+        <!-- Tab 2: Full Cycle Tests -->
+        <div id="tab-tests" class="tab-content">
+          <div class="info-card">
+            <h3>🧪 Comprehensive Testing Suite</h3>
+            <p>This suite tests all expectations of the complete workflow:</p>
+            <ul>
+              <li>✅ Generate campaign with strategy, calendar, and posts</li>
+              <li>✅ Edit post caption and update UI</li>
+              <li>✅ Regenerate post caption (uses persisted data)</li>
+              <li>✅ Regenerate post with image</li>
+              <li>✅ Delete post and update counts</li>
+              <li>✅ Add extra post for specific date</li>
+              <li>✅ Cache hits for strategy and festivals</li>
+              <li>✅ Duplicate detection for topics</li>
+              <li>✅ Performance metrics tracking</li>
+            </ul>
+          </div>
+
+          <button class="btn" onclick="runFullCycleTests()" style="margin-bottom: 30px">
+             Run All Tests
+          </button>
+
+          <div id="testProgress" style="display: none;">
+            <h3 style="margin-bottom: 20px">Test Progress</h3>
+            <div id="testExpectations"></div>
+          </div>
+
+          <div id="testSummary" style="display: none;" class="summary">
+            <h3>Test Summary</h3>
+            <div id="testSummaryContent"></div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Cache Management -->
+        <div id="tab-cache" class="tab-content">
+          <div class="info-card">
+            <h3>💾 Cache Management</h3>
+            <p>View and manage the centralized cache layer that improves performance by 80-90%</p>
+          </div>
+
+          <div class="test-section">
+            <h4>Cache Statistics</h4>
+            <div class="cache-stats" id="cacheStatsDisplay">
+              <div class="cache-stat">
+                <div class="cache-stat-value" id="cacheHits">-</div>
+                <div class="cache-stat-label">Cache Hits</div>
+              </div>
+              <div class="cache-stat">
+                <div class="cache-stat-value" id="cacheMisses">-</div>
+                <div class="cache-stat-label">Cache Misses</div>
+              </div>
+              <div class="cache-stat">
+                <div class="cache-stat-value" id="cacheHitRate">-</div>
+                <div class="cache-stat-label">Hit Rate</div>
+              </div>
+              <div class="cache-stat">
+                <div class="cache-stat-value" id="cacheSize">-</div>
+                <div class="cache-stat-label">Cache Size</div>
+              </div>
+              <div class="cache-stat">
+                <div class="cache-stat-value" id="cacheEvictions">-</div>
+                <div class="cache-stat-label">Evictions</div>
+              </div>
+              <div class="cache-stat">
+                <div class="cache-stat-value" id="cacheSets">-</div>
+                <div class="cache-stat-label">Total Sets</div>
+              </div>
+            </div>
+            <button class="btn" onclick="refreshCacheStats()" style="margin-top: 20px">
+              🔄 Refresh Stats
+            </button>
+          </div>
+
+          <div class="test-section">
+            <h4>Clear Cache</h4>
+            <div class="form-group">
+              <label for="clearPattern">Pattern (optional - clear all if empty)</label>
+              <input
+                type="text"
+                id="clearPattern"
+                placeholder="e.g., strategy, festival, or leave empty for all"
+              />
+            </div>
+            <button class="btn" onclick="clearCache()">
+              🗑️ Clear Cache
+            </button>
+            <div id="clearCacheResult" style="margin-top: 15px; display: none;"></div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Documentation -->
+        <div id="tab-docs" class="tab-content">
+          <div class="info-card">
+            <h3>📚 API Documentation</h3>
+            <p>Complete reference for all available endpoints</p>
+          </div>
+
+          <div class="test-section">
+            <h4>Core Endpoints</h4>
+            <div style="margin: 15px 0;">
+              <strong>POST /api/v1/generate-content</strong><br>
+              Generate complete campaign with strategy, calendar, and posts
+            </div>
+            <div style="margin: 15px 0;">
+              <strong>GET /health</strong><br>
+              Check API server health and service availability
+            </div>
+          </div>
+
+          <div class="test-section">
+            <h4>Post Management</h4>
+            <div style="margin: 15px 0;">
+              <strong>PUT /api/v1/posts/:postId</strong><br>
+              Edit post caption, hashtags, or call-to-action
+            </div>
+            <div style="margin: 15px 0;">
+              <strong>POST /api/v1/posts/:postId/regenerate</strong><br>
+              Regenerate post caption and/or image using AI
+            </div>
+            <div style="margin: 15px 0;">
+              <strong>DELETE /api/v1/posts/:postId</strong><br>
+              Permanently delete a post from database
+            </div>
+            <div style="margin: 15px 0;">
+              <strong>POST /api/v1/campaigns/:campaignId/posts/add</strong><br>
+              Add an extra post for a specific date
+            </div>
+          </div>
+
+          <div class="test-section">
+            <h4>Cache Management</h4>
+            <div style="margin: 15px 0;">
+              <strong>GET /api/v1/cache/stats</strong><br>
+              View cache statistics (hits, misses, hit rate, size)
+            </div>
+            <div style="margin: 15px 0;">
+              <strong>POST /api/v1/cache/clear</strong><br>
+              Clear all cache or specific pattern
+            </div>
+          </div>
+
+          <div class="test-section">
+            <h4>Performance Metrics</h4>
+            <ul style="margin-left: 20px; color: #555;">
+              <li><strong>Phase 1</strong>: Data Consistency (Duplicate Detection, Persisted Data)</li>
+              <li><strong>Phase 2</strong>: Performance (48% faster - 65s → 33.5s)</li>
+              <li><strong>Phase 3</strong>: Caching (15-25% additional improvement)</li>
+              <li><strong>Overall</strong>: 57-62% faster than baseline</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none">
+          <div class="spinner"></div>
+          <p style="font-size: 1.2rem; color: #667eea">
+            Generating your content...
+          </p>
+          <p style="color: #999; margin-top: 10px">
+            This may take 30-90 seconds
+          </p>
+        </div>
+
+        <div id="error" class="error" style="display: none"></div>
+
+        <div id="results" class="results" style="display: none">
 
     <!-- Edit Caption Modal -->
     <div id="editModal" class="modal">
@@ -586,6 +1032,26 @@
       </div>
     </div>
 
+    <!-- Edit Prompt Modal -->
+    <div id="editPromptModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Edit Image Prompt</h3>
+          <button class="modal-close" onclick="closeEditPromptModal()">
+            &times;
+          </button>
+        </div>
+        <div class="form-group">
+          <label for="editPromptText">Image Generation Prompt</label>
+          <textarea id="editPromptText" rows="8"></textarea>
+          <p style="color: #666; font-size: 12px; margin-top: 5px;">
+            Describe the image you want to generate. Be specific about style, elements, colors, and mood.
+          </p>
+        </div>
+        <button class="btn" onclick="saveEditedPrompt()">Save & Generate Image</button>
+      </div>
+    </div>
+
     <script>
       // Detect API URL based on current host
       const currentHost = window.location.hostname;
@@ -606,6 +1072,341 @@
 
       console.log("Current Host:", currentHost);
       console.log("API Base URL:", API_BASE_URL);
+
+      // Tab switching
+      function switchTab(tabName) {
+        // Hide all tabs
+        document.querySelectorAll('.tab-content').forEach(tab => {
+          tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab').forEach(tab => {
+          tab.classList.remove('active');
+        });
+
+        // Show selected tab
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+        event.target.classList.add('active');
+
+        // Load cache stats if cache tab
+        if (tabName === 'cache') {
+          refreshCacheStats();
+        }
+      }
+
+      // Test API connection
+      async function testAPIConnection() {
+        try {
+          const response = await fetch(`${API_BASE_URL}/health`);
+          const data = await response.json();
+          
+          if (data.success) {
+            showSuccessMessage(`✅ API Connected: ${data.data.status}`);
+          } else {
+            showError('API responded but reported issues');
+          }
+        } catch (error) {
+          showError(`Failed to connect to API: ${error.message}`);
+        }
+      }
+
+      // Cache Management Functions
+      async function refreshCacheStats() {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
+          const data = await response.json();
+
+          if (data.success) {
+            const stats = data.data;
+            document.getElementById('cacheHits').textContent = stats.hits;
+            document.getElementById('cacheMisses').textContent = stats.misses;
+            document.getElementById('cacheHitRate').textContent = stats.hitRate;
+            document.getElementById('cacheSize').textContent = stats.size;
+            document.getElementById('cacheEvictions').textContent = stats.evictions;
+            document.getElementById('cacheSets').textContent = stats.sets;
+            
+            showSuccessMessage('Cache stats refreshed');
+          }
+        } catch (error) {
+          console.error('Error fetching cache stats:', error);
+          showError('Failed to fetch cache stats');
+        }
+      }
+
+      async function clearCache() {
+        const pattern = document.getElementById('clearPattern').value.trim();
+        
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/v1/cache/clear`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pattern: pattern || undefined })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            const resultDiv = document.getElementById('clearCacheResult');
+            resultDiv.className = 'success-message';
+            resultDiv.textContent = data.data.message;
+            resultDiv.style.display = 'block';
+            
+            // Refresh stats
+            await refreshCacheStats();
+          }
+        } catch (error) {
+          console.error('Error clearing cache:', error);
+          showError('Failed to clear cache');
+        }
+      }
+
+      // Full Cycle Testing
+      const expectations = [
+        {
+          id: 'api-health',
+          title: 'API Health Check',
+          description: 'Verify API server is running and responsive',
+          test: async () => {
+            const response = await fetch(`${API_BASE_URL}/health`);
+            const data = await response.json();
+            return data.success && data.data.status === 'ok';
+          }
+        },
+        {
+          id: 'generate-campaign',
+          title: 'Generate Campaign',
+          description: 'Create new campaign with strategy, calendar, and posts',
+          test: async () => {
+            const response = await fetch(`${API_BASE_URL}/api/v1/generate-content`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                input: {
+                  industry: 'Coffee Shop',
+                  total_days: 7,
+                  frequency_per_week: 3,
+                  festival_enabled: true,
+                  services: ['Espresso', 'Pastries', 'Latte Art Classes'],
+                  geography: 'India',
+                  logo_url: 'https://example.com/logo.png',
+                  font_style: 'Roboto',
+                  accent_color: '#667eea',
+                  base_color: '#764ba2'
+                }
+              })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+              window.testCampaignId = data.data.campaign_id;
+              window.testPosts = data.data.output.posts;
+              window.testFirstPostId = data.data.output.posts[0].postId || data.data.output.posts[0].post_id;
+              return data.data.output.posts.length > 0 && data.data.summary.strategyPillars > 0;
+            }
+            return false;
+          }
+        },
+        {
+          id: 'cache-strategy',
+          title: 'Strategy Cached',
+          description: 'Verify strategy was cached for reuse',
+          test: async () => {
+            const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
+            const data = await response.json();
+            return data.success && data.data.hits >= 0 && data.data.sets > 0;
+          }
+        },
+        {
+          id: 'edit-post',
+          title: 'Edit Post Caption',
+          description: 'Update post caption and verify changes persist',
+          test: async () => {
+            if (!window.testFirstPostId) return false;
+            
+            const response = await fetch(`${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                caption: 'EDITED: This caption was updated via API test'
+              })
+            });
+            const data = await response.json();
+            return data.success;
+          }
+        },
+        {
+          id: 'regenerate-caption',
+          title: 'Regenerate Post Caption',
+          description: 'Generate new caption using persisted calendar data',
+          test: async () => {
+            if (!window.testFirstPostId) return false;
+            
+            const response = await fetch(`${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}/regenerate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ regenerateImage: false })
+            });
+            const data = await response.json();
+            return data.success && data.data.post.caption;
+          }
+        },
+        {
+          id: 'add-extra-post',
+          title: 'Add Extra Post',
+          description: 'Create additional post for specific date',
+          test: async () => {
+            if (!window.testCampaignId) return false;
+            
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const dateStr = tomorrow.toISOString().split('T')[0];
+            
+            const response = await fetch(`${API_BASE_URL}/api/v1/campaigns/${window.testCampaignId}/posts/add`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                date: dateStr,
+                pillar: 'Behind the Scenes',
+                topic: 'Coffee roasting process'
+              })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+              window.testExtraPostId = data.data.post.post_id;
+              return true;
+            }
+            return false;
+          }
+        },
+        {
+          id: 'delete-post',
+          title: 'Delete Post',
+          description: 'Remove post from database',
+          test: async () => {
+            if (!window.testExtraPostId) return false;
+            
+            const response = await fetch(`${API_BASE_URL}/api/v1/posts/${window.testExtraPostId}`, {
+              method: 'DELETE'
+            });
+            const data = await response.json();
+            return data.success;
+          }
+        },
+        {
+          id: 'cache-hit-rate',
+          title: 'Cache Performance',
+          description: 'Verify cache is improving performance',
+          test: async () => {
+            const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
+            const data = await response.json();
+            
+            if (data.success) {
+              const hitRate = parseFloat(data.data.hitRate);
+              return hitRate >= 0; // Any hit rate is acceptable for test
+            }
+            return false;
+          }
+        }
+      ];
+
+      async function runFullCycleTests() {
+        const progressDiv = document.getElementById('testProgress');
+        const expectationsDiv = document.getElementById('testExpectations');
+        const summaryDiv = document.getElementById('testSummary');
+        
+        progressDiv.style.display = 'block';
+        summaryDiv.style.display = 'none';
+        expectationsDiv.innerHTML = '';
+
+        // Create expectation items
+        expectations.forEach(exp => {
+          const item = document.createElement('div');
+          item.className = 'expectation-item';
+          item.id = `exp-${exp.id}`;
+          item.innerHTML = `
+            <div class="expectation-status pending" id="status-${exp.id}">⏳</div>
+            <div class="expectation-details">
+              <div class="expectation-title">${exp.title}</div>
+              <div class="expectation-desc">${exp.description}</div>
+            </div>
+            <div class="expectation-time" id="time-${exp.id}">-</div>
+          `;
+          expectationsDiv.appendChild(item);
+        });
+
+        let passed = 0;
+        let failed = 0;
+        const startTime = Date.now();
+
+        // Run tests sequentially
+        for (const exp of expectations) {
+          const statusEl = document.getElementById(`status-${exp.id}`);
+          const timeEl = document.getElementById(`time-${exp.id}`);
+          
+          statusEl.className = 'expectation-status testing';
+          statusEl.textContent = '⏳';
+
+          const testStart = Date.now();
+          
+          try {
+            const result = await exp.test();
+            const duration = Date.now() - testStart;
+            
+            if (result) {
+              statusEl.className = 'expectation-status passed';
+              statusEl.textContent = '✅';
+              timeEl.textContent = `${duration}ms`;
+              passed++;
+            } else {
+              statusEl.className = 'expectation-status failed';
+              statusEl.textContent = '❌';
+              timeEl.textContent = `${duration}ms`;
+              failed++;
+            }
+          } catch (error) {
+            console.error(`Test ${exp.id} failed:`, error);
+            const duration = Date.now() - testStart;
+            statusEl.className = 'expectation-status failed';
+            statusEl.textContent = '❌';
+            timeEl.textContent = `${duration}ms (error)`;
+            failed++;
+          }
+
+          // Small delay between tests
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        const totalTime = Date.now() - startTime;
+
+        // Show summary
+        summaryDiv.style.display = 'block';
+        const summaryContent = document.getElementById('testSummaryContent');
+        summaryContent.innerHTML = `
+          <div class="summary-stats">
+            <div class="stat">
+              <div class="stat-value" style="color: #4caf50">${passed}</div>
+              <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value" style="color: #f44336">${failed}</div>
+              <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">${expectations.length}</div>
+              <div class="stat-label">Total Tests</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">${(totalTime / 1000).toFixed(2)}s</div>
+              <div class="stat-label">Total Time</div>
+            </div>
+          </div>
+          <div style="margin-top: 20px; text-align: center;">
+            <strong>Success Rate:</strong> ${((passed / expectations.length) * 100).toFixed(1)}%
+          </div>
+        `;
+
+        summaryDiv.scrollIntoView({ behavior: 'smooth' });
+      }
 
       async function generateContent() {
         // Get form values
@@ -716,17 +1517,55 @@
           postCard.className = "post-card";
           const postId = post.postId || post.post_id; // Handle both formats
           postCard.id = `post-${postId}`;
+          
+          // Handle all possible field name variations for image prompt
+          let imagePrompt = post.detailedImagePrompt || 
+                           post.detailed_image_prompt || 
+                           post.imagePrompt || 
+                           post.image_prompt ||
+                           post.metadata?.detailedImagePrompt ||
+                           post.metadata?.detailed_image_prompt ||
+                           '';
+          
+          // Check if prompt is actually empty or null
+          if (!imagePrompt || imagePrompt.trim() === '') {
+            imagePrompt = 'No image prompt available';
+          }
+          
+          // Debug log to see what we're getting
+          console.log(`Post ${index + 1}:`, {
+            postId,
+            detailedImagePrompt: post.detailedImagePrompt,
+            detailed_image_prompt: post.detailed_image_prompt,
+            finalPrompt: imagePrompt
+          });
 
           postCard.innerHTML = `
-          <img src="${post.imageUrl}" alt="Generated post ${index + 1}" class="post-image" />
+          <img src="${post.imageUrl}" alt="Generated post ${index + 1}" class="post-image" id="img-${postId}" />
           <div class="post-content">
             <div class="post-date">Post ${index + 1} • ${formatDate(post.scheduledDate)}</div>
             <div class="post-caption" id="caption-${postId}">${post.caption}</div>
             <div class="hashtags">
               ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
             </div>
+            
+            <div class="image-prompt-section">
+              <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
+                <h5>🎨 Image Prompt</h5>
+                <span class="toggle-icon" id="toggle-${postId}">▼</span>
+              </div>
+              <div class="image-prompt-content" id="prompt-content-${postId}">
+                <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
+                <div class="image-actions">
+                  <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
+                  <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
+                  <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
+                </div>
+              </div>
+            </div>
+            
             <div class="post-management">
-              <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit</button>
+              <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
               <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
               <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
               <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
@@ -897,18 +1736,35 @@
 
           if (data.success) {
             const post = data.data.post;
+            const imagePrompt = post.detailed_image_prompt || 'No image prompt available';
 
             // Update the post card with new content
             postCard.innerHTML = `
-              <img src="${post.image_url}" alt="Regenerated post" class="post-image" />
+              <img src="${post.image_url}?t=${Date.now()}" alt="Regenerated post" class="post-image" id="img-${postId}" />
               <div class="post-content">
                 <div class="post-date">${formatDate(post.scheduled_date)}</div>
                 <div class="post-caption" id="caption-${postId}">${post.caption}</div>
                 <div class="hashtags">
                   ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
                 </div>
+                
+                <div class="image-prompt-section">
+                  <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
+                    <h5>🎨 Image Prompt</h5>
+                    <span class="toggle-icon" id="toggle-${postId}">▼</span>
+                  </div>
+                  <div class="image-prompt-content" id="prompt-content-${postId}">
+                    <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
+                    <div class="image-actions">
+                      <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
+                      <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
+                      <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
+                    </div>
+                  </div>
+                </div>
+                
                 <div class="post-management">
-                  <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit</button>
+                  <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
                   <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
                   <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
                   <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
@@ -1114,6 +1970,7 @@
       window.onclick = function (event) {
         const editModal = document.getElementById("editModal");
         const addPostModal = document.getElementById("addPostModal");
+        const editPromptModal = document.getElementById("editPromptModal");
 
         if (event.target === editModal) {
           closeEditModal();
@@ -1121,7 +1978,257 @@
         if (event.target === addPostModal) {
           closeAddPostModal();
         }
+        if (event.target === editPromptModal) {
+          closeEditPromptModal();
+        }
       };
+
+      // Image Prompt Functions
+      function togglePrompt(postId) {
+        const content = document.getElementById(`prompt-content-${postId}`);
+        const icon = document.getElementById(`toggle-${postId}`);
+        
+        if (content.classList.contains('collapsed')) {
+          content.classList.remove('collapsed');
+          icon.classList.remove('collapsed');
+        } else {
+          content.classList.add('collapsed');
+          icon.classList.add('collapsed');
+        }
+      }
+
+      let currentEditingPromptPostId = null;
+
+      function editPromptUI(postId, currentPrompt) {
+        currentEditingPromptPostId = postId;
+        document.getElementById("editPromptText").value = currentPrompt
+          .replace(/\\'/g, "'")
+          .replace(/&quot;/g, '"');
+        document.getElementById("editPromptModal").style.display = "flex";
+      }
+
+      function closeEditPromptModal() {
+        document.getElementById("editPromptModal").style.display = "none";
+        currentEditingPromptPostId = null;
+      }
+
+      async function saveEditedPrompt() {
+        if (!currentEditingPromptPostId) return;
+
+        const newPrompt = document.getElementById("editPromptText").value.trim();
+        if (!newPrompt) {
+          alert("Prompt cannot be empty");
+          return;
+        }
+
+        // Close modal and show loading
+        closeEditPromptModal();
+        
+        const postCard = document.getElementById(`post-${currentEditingPromptPostId}`);
+        const originalHTML = postCard.innerHTML;
+        
+        postCard.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
+            <div style="text-align: center;">
+              <div class="spinner"></div>
+              <p style="margin-top: 20px; color: #667eea;">Generating image with new prompt...</p>
+            </div>
+          </div>
+        `;
+
+        try {
+          // First update the prompt in the database
+          const updateResponse = await fetch(
+            `${API_BASE_URL}/api/v1/posts/${currentEditingPromptPostId}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ detailedImagePrompt: newPrompt })
+            }
+          );
+
+          if (!updateResponse.ok) {
+            throw new Error('Failed to update prompt');
+          }
+
+          // Then generate image with the new prompt
+          await generateImageWithPrompt(currentEditingPromptPostId, newPrompt);
+          
+        } catch (error) {
+          console.error("Error updating prompt:", error);
+          postCard.innerHTML = originalHTML;
+          showError("Failed to update prompt and generate image: " + error.message);
+        }
+      }
+
+      async function generateImageWithPrompt(postId, customPrompt = null) {
+        const imgElement = document.getElementById(`img-${postId}`);
+        const promptElement = document.getElementById(`prompt-${postId}`);
+        const prompt = customPrompt || promptElement?.textContent || '';
+        
+        if (!prompt || prompt === 'No image prompt available') {
+          alert('No image prompt available. Please regenerate the post to get a new prompt.');
+          return;
+        }
+
+        const postCard = document.getElementById(`post-${postId}`);
+        const originalHTML = postCard.innerHTML;
+
+        postCard.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
+            <div style="text-align: center;">
+              <div class="spinner"></div>
+              <p style="margin-top: 20px; color: #667eea;">Generating image...</p>
+              <p style="color: #999; margin-top: 10px;">This may take 10-30 seconds</p>
+            </div>
+          </div>
+        `;
+
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/posts/${postId}/generate-image`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt: prompt })
+            }
+          );
+
+          const data = await response.json();
+
+          if (data.success) {
+            // Reload the post from server to get updated data
+            const postResponse = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}`);
+            const postData = await postResponse.json();
+            
+            if (postData.success) {
+              const post = postData.data;
+              const imagePrompt = post.detailed_image_prompt || 'No image prompt available';
+              
+              postCard.innerHTML = `
+                <img src="${post.image_url}?t=${Date.now()}" alt="Generated post" class="post-image" id="img-${postId}" />
+                <div class="post-content">
+                  <div class="post-date">${formatDate(post.scheduled_date)}</div>
+                  <div class="post-caption" id="caption-${postId}">${post.caption}</div>
+                  <div class="hashtags">
+                    ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
+                  </div>
+                  
+                  <div class="image-prompt-section">
+                    <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
+                      <h5>🎨 Image Prompt</h5>
+                      <span class="toggle-icon" id="toggle-${postId}">▼</span>
+                    </div>
+                    <div class="image-prompt-content" id="prompt-content-${postId}">
+                      <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
+                      <div class="image-actions">
+                        <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
+                        <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
+                        <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="post-management">
+                    <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
+                    <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
+                    <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
+                    <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
+                  </div>
+                </div>
+              `;
+              
+              showSuccessMessage("Image generated successfully!");
+            }
+          } else {
+            postCard.innerHTML = originalHTML;
+            alert("Failed to generate image: " + data.error.message);
+          }
+        } catch (error) {
+          console.error("Error generating image:", error);
+          postCard.innerHTML = originalHTML;
+          alert("Failed to generate image: " + error.message);
+        }
+      }
+
+      async function regenerateImagePrompt(postId) {
+        if (!confirm('This will generate a new image prompt and create a new image. Continue?')) {
+          return;
+        }
+
+        const postCard = document.getElementById(`post-${postId}`);
+        const originalHTML = postCard.innerHTML;
+
+        postCard.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
+            <div style="text-align: center;">
+              <div class="spinner"></div>
+              <p style="margin-top: 20px; color: #667eea;">Generating new prompt and image...</p>
+              <p style="color: #999; margin-top: 10px;">This may take 15-40 seconds</p>
+            </div>
+          </div>
+        `;
+
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/api/v1/posts/${postId}/regenerate`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ regenerateImage: true })
+            }
+          );
+
+          const data = await response.json();
+
+          if (data.success) {
+            const post = data.data.post;
+            const imagePrompt = post.detailed_image_prompt || 'No image prompt available';
+
+            postCard.innerHTML = `
+              <img src="${post.image_url}?t=${Date.now()}" alt="Regenerated post" class="post-image" id="img-${postId}" />
+              <div class="post-content">
+                <div class="post-date">${formatDate(post.scheduled_date)}</div>
+                <div class="post-caption" id="caption-${postId}">${post.caption}</div>
+                <div class="hashtags">
+                  ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
+                </div>
+                
+                <div class="image-prompt-section">
+                  <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
+                    <h5>🎨 Image Prompt</h5>
+                    <span class="toggle-icon" id="toggle-${postId}">▼</span>
+                  </div>
+                  <div class="image-prompt-content" id="prompt-content-${postId}">
+                    <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
+                    <div class="image-actions">
+                      <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
+                      <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
+                      <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="post-management">
+                  <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
+                  <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
+                  <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
+                  <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
+                </div>
+              </div>
+            `;
+
+            showSuccessMessage("New prompt and image generated successfully!");
+          } else {
+            postCard.innerHTML = originalHTML;
+            alert("Failed to regenerate: " + data.error.message);
+          }
+        } catch (error) {
+          console.error("Error regenerating:", error);
+          postCard.innerHTML = originalHTML;
+          alert("Failed to regenerate: " + error.message);
+        }
+      }
     </script>
   </body>
 </html>

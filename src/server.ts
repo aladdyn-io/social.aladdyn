@@ -36,6 +36,7 @@ import {
   asyncHandler,
   AppError,
 } from './middleware/errorHandler';
+import cache from './services/cache';
 
 // ============================================================================
 // SERVER SETUP
@@ -96,6 +97,47 @@ app.get('/health', (req: Request, res: Response) => {
   };
 
   res.json(response);
+});
+
+/**
+ * Cache statistics endpoint
+ * GET /api/v1/cache/stats
+ * 
+ * Returns cache performance metrics
+ */
+app.get('/api/v1/cache/stats', (req: Request, res: Response) => {
+  const stats = cache.getStats();
+  res.json({
+    success: true,
+    data: stats,
+    meta: {
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
+/**
+ * Clear cache endpoint
+ * POST /api/v1/cache/clear
+ * 
+ * Clears all cached data (or specific patterns)
+ */
+app.post('/api/v1/cache/clear', (req: Request, res: Response) => {
+  const { pattern } = req.body;
+  
+  if (pattern) {
+    const count = cache.invalidatePattern(pattern);
+    res.json({
+      success: true,
+      data: { message: `Cleared ${count} cache entries matching pattern: ${pattern}` },
+    });
+  } else {
+    cache.clear();
+    res.json({
+      success: true,
+      data: { message: 'All cache cleared' },
+    });
+  }
 });
 
 /**
@@ -176,6 +218,7 @@ app.post(
 
       try {
         const postsFromDB = await getPostsByCampaign(campaignId);
+        console.log(`[API] DEBUG: First post from DB:`, postsFromDB[0]);
         postsWithIds = postsFromDB.map((dbPost: any) => ({
           entryId: dbPost.entry_id || dbPost.post_id,
           postId: dbPost.post_id,
@@ -184,14 +227,17 @@ app.post(
           hashtags: dbPost.hashtags,
           callToAction: dbPost.call_to_action,
           imageUrl: dbPost.image_url,
+          detailedImagePrompt: dbPost.detailed_image_prompt,
           metadata: {
             contentPillar: dbPost.content_pillar,
             festival: dbPost.festival_name,
             generatedAt: dbPost.created_at,
-            imagePrompt: dbPost.image_prompt,
+            topic: dbPost.topic,
             imageModel: dbPost.image_model,
+            imageGenerated: !!dbPost.image_url,
           },
         }));
+        console.log(`[API] DEBUG: First mapped post:`, postsWithIds[0]);
       } catch (dbError) {
         console.error('[API] ⚠ Failed to fetch posts from DB, returning in-memory posts:', dbError);
         dbWarning = 'Database unavailable; returned in-memory posts without IDs';
@@ -199,7 +245,7 @@ app.post(
         // Attach synthetic IDs so frontend actions still work in-memory
         postsWithIds = output.posts.map((p, idx) => ({
           ...p,
-          postId: p.metadata?.imagePrompt ? `mem-${idx}-${Date.now()}` : `mem-${idx}`,
+          postId: p.entryId || `mem-${idx}-${Date.now()}`,
         }));
       }
 
@@ -501,10 +547,129 @@ app.delete(
       res.json(response);
     } catch (error) {
       throw new AppError(
-        ApiErrorCode.DATABASE_ERROR,
+        ApiErrorCode.PIPELINE_FAILED,
         `Failed to delete post: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
         { postId }
+      );
+    }
+  })
+);
+
+/**
+ * Generate image for a specific post (ON-DEMAND)
+ * POST /api/v1/posts/:postId/generate-image
+ * 
+ * NEW WORKFLOW:
+ * - User views posts with captions and prompts (no images)
+ * - User selects specific posts to generate images for
+ * - This endpoint generates and uploads the image
+ * - Returns the public image URL
+ * 
+ * Request body: {} (optional - can include provider overrides)
+ * Returns: { imageUrl, model, generatedAt }
+ */
+app.post(
+  '/api/v1/posts/:postId/generate-image',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postId } = req.params;
+    const startTime = Date.now();
+
+    console.log(`[API] Generating image on-demand for post: ${postId}`);
+
+    try {
+      // Import on-demand service
+      const { generatePostImage } = await import('./services/onDemandImageGeneration');
+
+      // Generate image using detailed prompt from database
+      const imageUrl = await generatePostImage(postId);
+
+      const duration = Date.now() - startTime;
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          postId,
+          imageUrl,
+          message: 'Image generated successfully',
+          generatedAt: new Date().toISOString(),
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          processingTime: duration,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      throw new AppError(
+        ApiErrorCode.PIPELINE_FAILED,
+        `Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        500,
+        { postId }
+      );
+    }
+  })
+);
+
+/**
+ * Batch generate images for multiple posts
+ * POST /api/v1/posts/generate-images/batch
+ * 
+ * Request body: { postIds: string[] }
+ * Returns: { results: { postId: string, success: boolean, imageUrl?: string, error?: string }[] }
+ */
+app.post(
+  '/api/v1/posts/generate-images/batch',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postIds } = req.body;
+    const startTime = Date.now();
+
+    if (!Array.isArray(postIds) || postIds.length === 0) {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        'Request body must include "postIds" array with at least one post ID',
+        400
+      );
+    }
+
+    console.log(`[API] Batch generating images for ${postIds.length} posts`);
+
+    try {
+      const { generatePostImages } = await import('./services/onDemandImageGeneration');
+
+      const resultsMap = await generatePostImages(postIds);
+      
+      // Convert map to array for response
+      const results = Array.from(resultsMap.entries()).map(([postId, result]) => ({
+        postId,
+        ...result,
+      }));
+
+      const successCount = results.filter(r => r.success).length;
+      const duration = Date.now() - startTime;
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          totalRequested: postIds.length,
+          successCount,
+          failureCount: postIds.length - successCount,
+          results,
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          processingTime: duration,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      throw new AppError(
+        ApiErrorCode.PIPELINE_FAILED,
+        `Failed to batch generate images: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        500,
+        { postIds }
       );
     }
   })

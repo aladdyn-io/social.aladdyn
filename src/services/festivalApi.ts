@@ -7,11 +7,12 @@
  * Features:
  * - Accurate dates for 200+ countries
  * - Automatic updates when dates change
- * - Caching to reduce API calls
+ * - Centralized caching to reduce API calls
  */
 
 import axios from 'axios';
 import { FestivalEvent } from '../types/content';
+import cache, { CacheTTL, CacheKey } from './cache';
 
 interface CalendarificHoliday {
   name: string;
@@ -38,12 +39,8 @@ interface CalendarificResponse {
   };
 }
 
-// In-memory cache to avoid hitting rate limits
-const cache: Map<string, { data: FestivalEvent[]; timestamp: number }> = new Map();
-const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
-
 /**
- * Fetches festivals/holidays for a given year and country
+ * Fetches festivals/holidays for a given year and country with centralized caching
  * 
  * @param year - Year to fetch holidays for
  * @param country - ISO 3166-1 country code (e.g., "IN" for India, "US" for USA)
@@ -55,12 +52,14 @@ export async function fetchFestivalsFromAPI(
 ): Promise<FestivalEvent[]> {
   const cacheKey = `${country}-${year}`;
   
-  // Check cache first
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) {
-    console.log(`[FestivalAPI] ✓ Using cached festivals for ${country} ${year}`);
-    return cached.data;
+  // Check centralized cache first
+  const cached = cache.get<FestivalEvent[]>(cacheKey);
+  if (cached) {
+    console.log(`[FestivalAPI] ✓ Cache hit for ${country} ${year}`);
+    return cached;
   }
+
+  console.log(`[FestivalAPI] ✗ Cache miss for ${country} ${year}, fetching from API...`);
 
   // Get API key from environment
   const apiKey = process.env.CALENDARIFIC_API_KEY;
@@ -101,8 +100,8 @@ export async function fetchFestivalsFromAPI(
 
     console.log(`[FestivalAPI] ✓ Fetched ${relevantFestivals.length} festivals (${festivals.length} total)`);
 
-    // Cache the results
-    cache.set(cacheKey, { data: relevantFestivals, timestamp: Date.now() });
+    // Cache the results in centralized cache (24 hours)
+    cache.set(cacheKey, relevantFestivals, CacheTTL.FESTIVAL);
 
     return relevantFestivals;
   } catch (error) {

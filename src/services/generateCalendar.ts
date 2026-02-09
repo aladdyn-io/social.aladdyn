@@ -2,36 +2,40 @@
  * Content Calendar Generation Service
  * 
  * Creates a posting schedule with even distribution and festival integration.
- * This is RULE-BASED logic (no AI).
+ * Now uses AI-based topic generation for contextual, unique topics.
  */
 
 import { CalendarItem, Strategy, FestivalEvent } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
+import { generateTopicsBatch, buildTopicRequests } from './generateTopics';
 
 /**
- * Generates content calendar based on rules
+ * Generates content calendar with AI-powered topic generation
  * 
  * Algorithm:
  * 1. Calculate posting dates (evenly distributed)
  * 2. Assign content pillars based on strategy content_mix
  * 3. Shuffle pillars to avoid consecutive repeats
  * 4. Overlay festival posts (capped at 20% of total)
- * 5. Generate topics for each calendar item
+ * 5. Generate AI-based topics for each calendar item
  * 
  * WHY: Deterministic scheduling ensures predictable content flow
  * WHY: Even spacing looks professional
  * WHY: Festival overlay keeps content timely and relevant
+ * WHY: AI topics are contextual, campaign-aware, and unique
  * 
  * @param input - Normalized campaign input
  * @param strategy - Generated content strategy
  * @param festivals - Array of festival events to consider
- * @returns Array of scheduled calendar items
+ * @param campaignId - Optional campaign ID for duplicate detection
+ * @returns Array of scheduled calendar items with AI-generated topics
  */
-export function generateCalendar(
+export async function generateCalendar(
   input: NormalizedInput,
   strategy: Strategy,
-  festivals: FestivalEvent[]
-): CalendarItem[] {
+  festivals: FestivalEvent[],
+  campaignId?: string
+): Promise<CalendarItem[]> {
   // ========================================================================
   // STEP 1: CALCULATE POSTING DATES
   // WHY: Posts must be evenly distributed across the campaign period
@@ -62,11 +66,18 @@ export function generateCalendar(
   );
 
   // ========================================================================
-  // STEP 4: BUILD CALENDAR ITEMS
-  // WHY: Combine dates, pillars, and festivals into final calendar
+  // STEP 4: BUILD CALENDAR ITEMS (without topics first)
+  // WHY: Combine dates, pillars, and festivals into calendar structure
   // ========================================================================
   
-  const calendar: CalendarItem[] = [];
+  const calendarWithoutTopics: Array<{
+    date: string;
+    pillar: string;
+    content_type: string;
+    is_festival: boolean;
+    festival_name?: string;
+    day_number: number;
+  }> = [];
 
   for (let i = 0; i < postingDates.length; i++) {
     const date = postingDates[i];
@@ -75,27 +86,58 @@ export function generateCalendar(
     
     if (festivalInfo) {
       // Festival post
-      calendar.push({
+      calendarWithoutTopics.push({
         date: dateString,
         pillar: 'Festival / Brand Connect',
-        topic: generateFestivalTopic(festivalInfo.name, input.industry),
         content_type: 'image',
         is_festival: true,
         festival_name: festivalInfo.name,
+        day_number: i + 1,
       });
     } else {
-      // Regular post
+      // Regular post - determine content type from content_mix
       const pillar = pillarAssignments[i];
-      calendar.push({
+      const contentType = determineContentType(pillar, strategy);
+      
+      calendarWithoutTopics.push({
         date: dateString,
         pillar,
-        topic: generateRegularTopic(pillar, input.industry, input.services),
-        content_type: 'image',
+        content_type: contentType,
         is_festival: false,
+        day_number: i + 1,
       });
     }
   }
 
+  // ========================================================================
+  // STEP 5: GENERATE AI TOPICS FOR ALL CALENDAR ITEMS
+  // WHY: AI generates contextual, campaign-aware, unique topics
+  // ========================================================================
+  
+  console.log('[generateCalendar] Generating AI topics for calendar...');
+  
+  const topicRequests = buildTopicRequests(
+    calendarWithoutTopics,
+    input,
+    strategy
+  );
+
+  const topics = await generateTopicsBatch(input, strategy, topicRequests, campaignId);
+
+  // ========================================================================
+  // STEP 6: COMBINE CALENDAR WITH GENERATED TOPICS
+  // ========================================================================
+  
+  const calendar: CalendarItem[] = calendarWithoutTopics.map((entry, index) => ({
+    date: entry.date,
+    pillar: entry.pillar,
+    topic: topics[index],
+    content_type: entry.content_type as 'image',
+    is_festival: entry.is_festival,
+    festival_name: entry.festival_name,
+  }));
+
+  console.log(`[generateCalendar] ✓ Generated calendar with ${calendar.length} entries`);
   return calendar;
 }
 
@@ -261,26 +303,24 @@ function shuffleAvoidingConsecutive(arr: string[]): string[] {
 }
 
 /**
- * Generates topic for festival post
+ * Determines content type from pillar based on strategy
  * 
- * WHY: Topic guides content creation without being full caption
+ * WHY: Maps pillars to education/trust/promotion categories
  */
-function generateFestivalTopic(festivalName: string, industry: string): string {
-  return `${festivalName} celebration connecting with ${industry} audience`;
-}
-
-/**
- * Generates topic for regular post
- * 
- * WHY: Topic provides direction for caption and image generation
- */
-function generateRegularTopic(
-  pillar: string,
-  industry: string,
-  services: string[]
-): string {
-  const primaryService = services[0] || industry;
-  return `${pillar} content highlighting ${primaryService}`;
+function determineContentType(pillar: string, strategy: Strategy): string {
+  // Simple heuristic: rotate through types based on content_mix
+  // In practice, this could be more sophisticated
+  
+  const mix = strategy.content_mix;
+  const random = Math.random() * 100;
+  
+  if (random < mix.education) {
+    return 'education';
+  } else if (random < mix.education + mix.trust) {
+    return 'trust';
+  } else {
+    return 'promotion';
+  }
 }
 
 /**

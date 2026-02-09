@@ -8,14 +8,18 @@
 import { CalendarItem, Strategy } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import OpenAI from 'openai';
+import { geminiClient } from '../utils/geminiAdapter';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Use Gemini if configured, otherwise use OpenAI
+const llmClient = process.env.LLM_PROVIDER === 'gemini' 
+  ? geminiClient 
+  : new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
 
 /**
- * Generates social media caption for a calendar item
+ * Generates social media caption for a calendar item with retry and rate limit handling
  * 
  * WHY: Captions require creative writing that matches brand voice
  * WHY: AI can adapt tone and style based on strategy and context
@@ -32,22 +36,30 @@ export async function generateCaption(
   strategy: Strategy,
   normalized: NormalizedInput
 ): Promise<string> {
-  // Try to generate caption (with one retry on failure)
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  // Try to generate caption (with retries and exponential backoff)
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const rawCaption = await callLLM(calendarItem, strategy, normalized);
       
       // Validate output
       const validatedCaption = validateCaption(rawCaption);
       return validatedCaption;
-    } catch (error) {
-      if (attempt === 2) {
-        // WHY: After 2 attempts, fail fast
+    } catch (error: any) {
+      // Handle rate limit errors with exponential backoff
+      if (error?.status === 429 || error?.code === 'rate_limit_exceeded') {
+        const backoffDelay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.warn(`[generateCaption] ⚠ Rate limit hit (attempt ${attempt}/3), backing off ${backoffDelay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+        continue;
+      }
+      
+      if (attempt === 3) {
+        // WHY: After 3 attempts, fail fast
         throw new Error(
           `Caption generation failed after retry: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
-      // WHY: Retry once in case of transient issues
+      // WHY: Retry in case of transient issues
       continue;
     }
   }
@@ -67,7 +79,7 @@ async function callLLM(
 ): Promise<string> {
   const prompt = buildPrompt(item, strategy, normalized);
 
-  const completion = await openai.chat.completions.create({
+  const completion = await llmClient.chat.completions.create({
     model: process.env.LLM_MODEL || 'gpt-4-turbo-preview',
     messages: [
       {
@@ -163,8 +175,29 @@ function validateCaption(caption: string): string {
   }
 
   // WHY: Captions that are too long don't fit the 4-6 line requirement
+  // SAFETY: Instead of failing, truncate at sentence boundary
   if (caption.length > 500) {
-    throw new Error('Caption is too long (maximum 500 characters)');
+    console.warn(`[validateCaption] ⚠ Caption too long (${caption.length} chars), truncating...`);
+    
+    // Find last complete sentence within 450 chars (leave room for ellipsis)
+    const truncated = caption.substring(0, 450);
+    const lastPeriod = truncated.lastIndexOf('.');
+    const lastExclamation = truncated.lastIndexOf('!');
+    const lastQuestion = truncated.lastIndexOf('?');
+    
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion);
+    
+    if (lastSentenceEnd > 100) {
+      // Good sentence boundary found
+      caption = caption.substring(0, lastSentenceEnd + 1);
+    } else {
+      // No good sentence boundary, truncate at word boundary
+      const words = caption.substring(0, 450).split(' ');
+      words.pop(); // Remove incomplete word
+      caption = words.join(' ') + '...';
+    }
+    
+    console.log(`[validateCaption] ✓ Truncated to ${caption.length} chars`);
   }
 
   // WHY: Remove any markdown formatting that slipped through

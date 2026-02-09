@@ -8,8 +8,7 @@
  */
 
 import { Pool } from 'pg';
-import { DatabaseInput } from '../types';
-import { PostItem } from '../types/content';
+import { PostItem, Strategy, CalendarItem, CampaignPhase, ContentInput } from '../types/content';
 
 /**
  * PostgreSQL connection pool
@@ -42,7 +41,7 @@ pool.on('error', (err) => {
  */
 export async function getCampaignFromDB(
   campaignId: string
-): Promise<DatabaseInput> {
+): Promise<ContentInput> {
   console.log(`[Database] Fetching campaign: ${campaignId}`);
 
   try {
@@ -74,7 +73,6 @@ export async function getCampaignFromDB(
     console.log('[Database] ✓ Campaign fetched successfully');
 
     return {
-      campaign_id: row.campaign_id,
       industry: row.industry,
       total_days: row.total_days,
       frequency_per_week: row.frequency_per_week,
@@ -103,7 +101,7 @@ export async function getCampaignFromDB(
  */
 export async function saveCampaignToDB(
   campaignId: string,
-  input: DatabaseInput
+  input: ContentInput
 ): Promise<string> {
   console.log(`[Database] Saving campaign: ${campaignId}`);
 
@@ -206,7 +204,7 @@ export async function savePostsToDB(
           hashtags,
           call_to_action,
           image_url,
-          image_prompt,
+          detailed_image_prompt,
           image_model,
           content_pillar,
           topic,
@@ -226,11 +224,11 @@ export async function savePostsToDB(
         post.caption,
         post.hashtags,
         post.callToAction || null,
-        post.imageUrl,
-        post.metadata.imagePrompt,
-        post.metadata.imageModel,
+        post.imageUrl, // null until image generated on-demand
+        post.detailedImagePrompt, // comprehensive prompt
+        post.metadata.imageModel || null, // null until image generated
         post.metadata.contentPillar || null,
-        null, // topic - not available in PostItem
+        post.metadata.topic, // now available in metadata
         'image',
         post.metadata.festival ? true : false,
         post.metadata.festival || null,
@@ -279,6 +277,7 @@ export async function getPostsByCampaign(
         call_to_action,
         image_url,
         image_prompt,
+        detailed_image_prompt,
         image_model,
         content_pillar,
         topic,
@@ -503,3 +502,432 @@ export async function closeDatabase(): Promise<void> {
   await pool.end();
   console.log('[Database] Connection pool closed');
 }
+
+// ============================================================================
+// STRATEGY FUNCTIONS
+// ============================================================================
+
+/**
+ * Saves strategy to database
+ * 
+ * @param campaignId - Campaign UUID
+ * @param strategy - Generated strategy
+ * @returns Strategy ID
+ */
+export async function saveStrategyToDB(
+  campaignId: string,
+  strategy: Strategy
+): Promise<string> {
+  console.log(`[Database] Saving strategy for campaign: ${campaignId}`);
+
+  try {
+    const query = `
+      INSERT INTO strategies (
+        campaign_id,
+        content_pillars,
+        tone,
+        cta_style,
+        content_mix_education,
+        content_mix_trust,
+        content_mix_promotion,
+        campaign_phases,
+        model_used
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING strategy_id
+    `;
+
+    const values = [
+      campaignId,
+      strategy.content_pillars,
+      strategy.tone,
+      strategy.cta_style,
+      strategy.content_mix.education,
+      strategy.content_mix.trust,
+      strategy.content_mix.promotion,
+      strategy.campaign_phases ? JSON.stringify(strategy.campaign_phases) : null,
+      process.env.LLM_MODEL || 'gpt-4-turbo-preview',
+    ];
+
+    const result = await pool.query(query, values);
+    const strategyId = result.rows[0].strategy_id;
+
+    console.log(`[Database] ✓ Strategy saved: ${strategyId}`);
+    return strategyId;
+  } catch (error) {
+    console.error('[Database] ✗ Save strategy failed:', error);
+    throw new Error(
+      `Failed to save strategy: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Fetches strategy from database
+ * 
+ * @param strategyId - Strategy UUID
+ * @returns Strategy object
+ */
+export async function getStrategyFromDB(strategyId: string): Promise<Strategy> {
+  console.log(`[Database] Fetching strategy: ${strategyId}`);
+
+  try {
+    const query = `
+      SELECT 
+        strategy_id,
+        content_pillars,
+        tone,
+        cta_style,
+        content_mix_education,
+        content_mix_trust,
+        content_mix_promotion,
+        campaign_phases
+      FROM strategies
+      WHERE strategy_id = $1
+    `;
+
+    const result = await pool.query(query, [strategyId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Strategy not found: ${strategyId}`);
+    }
+
+    const row = result.rows[0];
+
+    const strategy: Strategy = {
+      strategy_id: row.strategy_id,
+      content_pillars: row.content_pillars,
+      tone: row.tone,
+      cta_style: row.cta_style,
+      content_mix: {
+        education: row.content_mix_education,
+        trust: row.content_mix_trust,
+        promotion: row.content_mix_promotion,
+      },
+      campaign_phases: row.campaign_phases ? JSON.parse(row.campaign_phases) : undefined,
+    };
+
+    console.log(`[Database] ✓ Strategy found`);
+    return strategy;
+  } catch (error) {
+    console.error('[Database] ✗ Fetch strategy failed:', error);
+    throw new Error(
+      `Failed to fetch strategy: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Gets strategy for a campaign
+ * 
+ * @param campaignId - Campaign UUID
+ * @returns Strategy object or null if not found
+ */
+export async function getStrategyByCampaignId(campaignId: string): Promise<Strategy | null> {
+  try {
+    const query = `
+      SELECT 
+        strategy_id,
+        content_pillars,
+        tone,
+        cta_style,
+        content_mix_education,
+        content_mix_trust,
+        content_mix_promotion,
+        campaign_phases
+      FROM strategies
+      WHERE campaign_id = $1
+    `;
+
+    const result = await pool.query(query, [campaignId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+
+    return {
+      strategy_id: row.strategy_id,
+      content_pillars: row.content_pillars,
+      tone: row.tone,
+      cta_style: row.cta_style,
+      content_mix: {
+        education: row.content_mix_education,
+        trust: row.content_mix_trust,
+        promotion: row.content_mix_promotion,
+      },
+      campaign_phases: row.campaign_phases ? JSON.parse(row.campaign_phases) : undefined,
+    };
+  } catch (error) {
+    console.error('[Database] ✗ Fetch strategy by campaign failed:', error);
+    return null;
+  }
+}
+
+// ============================================================================
+// CALENDAR ENTRY FUNCTIONS
+// ============================================================================
+
+/**
+ * Saves calendar entries to database
+ * 
+ * @param campaignId - Campaign UUID
+ * @param strategyId - Strategy UUID
+ * @param calendar - Array of calendar items
+ * @returns Array of entry IDs
+ */
+export async function saveCalendarToDB(
+  campaignId: string,
+  strategyId: string,
+  calendar: CalendarItem[]
+): Promise<string[]> {
+  console.log(`[Database] Saving ${calendar.length} calendar entries for campaign: ${campaignId}`);
+
+  const client = await pool.connect();
+  const entryIds: string[] = [];
+  const duplicateTopics: string[] = [];
+
+  try {
+    await client.query('BEGIN');
+
+    for (let i = 0; i < calendar.length; i++) {
+      const entry = calendar[i];
+      
+      // Check for duplicate topic
+      const isDuplicate = await isTopicDuplicate(campaignId, entry.topic);
+      if (isDuplicate) {
+        duplicateTopics.push(entry.topic);
+        console.warn(`[Database] ⚠ Duplicate topic detected (Day ${i + 1}): "${entry.topic}"`);
+      }
+      
+      const query = `
+        INSERT INTO calendar_entries (
+          campaign_id,
+          strategy_id,
+          scheduled_date,
+          day_number,
+          pillar,
+          topic,
+          content_type,
+          is_festival,
+          festival_name,
+          campaign_phase,
+          status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING entry_id
+      `;
+
+      const values = [
+        campaignId,
+        strategyId,
+        entry.date,
+        i + 1, // day_number (1-indexed)
+        entry.pillar,
+        entry.topic,
+        entry.content_type || 'image',
+        entry.is_festival || false,
+        entry.festival_name || null,
+        null, // campaign_phase - will be populated later
+        'planned',
+      ];
+
+      const result = await client.query(query, values);
+      entryIds.push(result.rows[0].entry_id);
+    }
+
+    await client.query('COMMIT');
+    console.log(`[Database] ✓ Saved ${entryIds.length} calendar entries`);
+    
+    if (duplicateTopics.length > 0) {
+      console.warn(`[Database] ⚠ ${duplicateTopics.length} duplicate topics saved (consider regenerating)`);
+    }
+
+    return entryIds;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[Database] ✗ Save calendar failed:', error);
+    throw new Error(
+      `Failed to save calendar: ${error instanceof Error ? error.message : String(error)}`
+    );
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Gets calendar entry by ID
+ * 
+ * @param entryId - Calendar entry UUID
+ * @returns Calendar entry data
+ */
+export async function getCalendarEntryById(entryId: string): Promise<any> {
+  console.log(`[Database] Fetching calendar entry: ${entryId}`);
+
+  try {
+    const query = `
+      SELECT 
+        entry_id,
+        campaign_id,
+        strategy_id,
+        scheduled_date,
+        day_number,
+        pillar,
+        topic,
+        content_type,
+        is_festival,
+        festival_name,
+        campaign_phase,
+        status
+      FROM calendar_entries
+      WHERE entry_id = $1
+    `;
+
+    const result = await pool.query(query, [entryId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Calendar entry not found: ${entryId}`);
+    }
+
+    console.log(`[Database] ✓ Calendar entry found`);
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Database] ✗ Fetch calendar entry failed:', error);
+    throw new Error(
+      `Failed to fetch calendar entry: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Gets all calendar entries for a campaign
+ * 
+ * @param campaignId - Campaign UUID
+ * @returns Array of calendar entries
+ */
+export async function getCalendarByCampaignId(campaignId: string): Promise<any[]> {
+  console.log(`[Database] Fetching calendar for campaign: ${campaignId}`);
+
+  try {
+    const query = `
+      SELECT 
+        entry_id,
+        campaign_id,
+        strategy_id,
+        scheduled_date,
+        day_number,
+        pillar,
+        topic,
+        content_type,
+        is_festival,
+        festival_name,
+        campaign_phase,
+        status
+      FROM calendar_entries
+      WHERE campaign_id = $1
+      ORDER BY scheduled_date ASC
+    `;
+
+    const result = await pool.query(query, [campaignId]);
+
+    console.log(`[Database] ✓ Found ${result.rows.length} calendar entries`);
+    return result.rows;
+  } catch (error) {
+    console.error('[Database] ✗ Fetch calendar failed:', error);
+    throw new Error(
+      `Failed to fetch calendar: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+// ============================================================================
+// DUPLICATE DETECTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Gets all existing topics for a campaign
+ * 
+ * @param campaignId - Campaign UUID
+ * @returns Array of topic strings
+ */
+export async function getExistingTopicsForCampaign(campaignId: string): Promise<string[]> {
+  try {
+    const query = `
+      SELECT topic
+      FROM calendar_entries
+      WHERE campaign_id = $1
+      ORDER BY day_number ASC
+    `;
+
+    const result = await pool.query(query, [campaignId]);
+    return result.rows.map(row => row.topic);
+  } catch (error) {
+    console.error('[Database] ✗ Fetch existing topics failed:', error);
+    return [];
+  }
+}
+
+/**
+ * Checks if a topic is duplicate for a campaign
+ * 
+ * @param campaignId - Campaign UUID
+ * @param topic - Topic to check
+ * @returns True if duplicate exists
+ */
+export async function isTopicDuplicate(
+  campaignId: string,
+  topic: string
+): Promise<boolean> {
+  try {
+    const query = `
+      SELECT COUNT(*) as count
+      FROM calendar_entries
+      WHERE campaign_id = $1 AND LOWER(topic) = LOWER($2)
+    `;
+
+    const result = await pool.query(query, [campaignId, topic]);
+    return parseInt(result.rows[0].count) > 0;
+  } catch (error) {
+    console.error('[Database] ✗ Duplicate check failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Update post with generated image URL
+ * 
+ * @param postId - Post UUID
+ * @param imageUrl - Public URL to generated image
+ * @param imageModel - Model used for generation
+ */
+export async function updatePostImage(
+  postId: string,
+  imageUrl: string,
+  imageModel: string
+): Promise<void> {
+  console.log(`[Database] Updating post ${postId} with generated image`);
+
+  try {
+    const query = `
+      UPDATE posts
+      SET 
+        image_url = $1,
+        image_model = $2,
+        updated_at = NOW()
+      WHERE post_id = $3
+    `;
+
+    const result = await pool.query(query, [imageUrl, imageModel, postId]);
+
+    if (result.rowCount === 0) {
+      throw new Error(`Post not found: ${postId}`);
+    }
+
+    console.log(`[Database] ✓ Post image updated successfully`);
+  } catch (error) {
+    console.error('[Database] ✗ Update failed:', error);
+    throw new Error(
+      `Failed to update post image: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+

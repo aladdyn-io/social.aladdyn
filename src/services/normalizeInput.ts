@@ -25,6 +25,7 @@ export interface NormalizedInput {
   base_color: string;
   services: string[];
   geography: string;
+  campaign_goal?: 'awareness' | 'consideration' | 'conversion' | 'retention';
 
   // Computed fields
   posting_days: number;
@@ -127,6 +128,7 @@ export function normalizeInput(input: ContentInput): NormalizedInput {
     base_color: input.base_color,
     services: input.services.map(s => s.trim()).filter(s => s.length > 0),
     geography: input.geography.trim(),
+    campaign_goal: input.campaign_goal,
     posting_days,
     brand_stage,
     trust_weight,

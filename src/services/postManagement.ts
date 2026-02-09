@@ -13,14 +13,16 @@ import { NormalizedInput } from './normalizeInput';
 import { generateCaption } from './generateCaption';
 import { generateImage } from './imageGenerator';
 import { uploadImageToStorage } from './objectStorage';
-import { assemblePost } from './assemblePost';
 import { 
   getPostById, 
   updatePost, 
   deletePost as deletePostFromDB,
   getCampaignFromDB,
-  savePostsToDB 
+  savePostsToDB,
+  getCalendarEntryById,
+  getStrategyFromDB
 } from '../db/database';
+import cache, { CacheKey } from './cache';
 
 /**
  * Edit post caption and/or image URL
@@ -74,6 +76,8 @@ export async function editPost(
 /**
  * Regenerate post content (caption + image)
  * 
+ * Now uses persisted calendar entry and strategy for consistency
+ * 
  * @param postId - Post ID from database
  * @param regenerateImage - Whether to regenerate image (default: false)
  * @returns Regenerated post
@@ -90,10 +94,76 @@ export async function regeneratePost(
     throw new Error(`Post not found: ${postId}`);
   }
 
-  // Get campaign data to reconstruct inputs
+  let calendarItem: CalendarItem;
+  let strategy: any;
+
+  // ========================================================================
+  // TRY TO FETCH FROM PERSISTED DATA (NEW APPROACH)
+  // ========================================================================
+  
+  try {
+    // Attempt to get calendar entry and strategy from DB
+    if (existingPost.calendar_entry_id) {
+      const calendarEntry = await getCalendarEntryById(existingPost.calendar_entry_id);
+      
+      calendarItem = {
+        date: new Date(calendarEntry.scheduled_date).toISOString().split('T')[0],
+        pillar: calendarEntry.pillar,
+        topic: calendarEntry.topic,
+        content_type: calendarEntry.content_type || 'image',
+        is_festival: calendarEntry.is_festival || false,
+        festival_name: calendarEntry.festival_name || undefined,
+      };
+      
+      console.log(`[PostManagement] ✓ Loaded calendar entry from DB`);
+    } else {
+      throw new Error('No calendar_entry_id found');
+    }
+    
+    // Fetch strategy
+    if (existingPost.strategy_id) {
+      strategy = await getStrategyFromDB(existingPost.strategy_id);
+      console.log(`[PostManagement] ✓ Loaded strategy from DB`);
+    } else {
+      throw new Error('No strategy_id found');
+    }
+  } catch (error) {
+    // ========================================================================
+    // FALLBACK: RECONSTRUCT DATA (BACKWARD COMPATIBILITY)
+    // ========================================================================
+    
+    console.warn(`[PostManagement] ⚠ Could not load persisted data, reconstructing:`, error);
+    
+    // Get campaign data to reconstruct inputs
+    const campaignData = await getCampaignFromDB(existingPost.campaign_id);
+
+    // Create calendar item from existing post data
+    calendarItem = {
+      date: new Date(existingPost.scheduled_date).toISOString().split('T')[0],
+      pillar: existingPost.content_pillar || 'General',
+      topic: existingPost.topic || existingPost.content_pillar || 'General content',
+      content_type: existingPost.content_type || 'image',
+      is_festival: existingPost.is_festival || false,
+      festival_name: existingPost.festival_name || undefined,
+    };
+
+    // Build a basic strategy for regeneration
+    strategy = {
+      content_pillars: [calendarItem.pillar],
+      tone: 'warm and engaging',
+      cta_style: 'inviting',
+      content_mix: { education: 30, trust: 50, promotion: 20 },
+    };
+    
+    console.warn(`[PostManagement] ⚠ Using reconstructed data (not from source of truth)`);
+  }
+
+  // ========================================================================
+  // BUILD NORMALIZED INPUT
+  // ========================================================================
+  
   const campaignData = await getCampaignFromDB(existingPost.campaign_id);
 
-  // Build normalized input
   const normalizedInput: NormalizedInput = {
     industry: campaignData.industry,
     services: campaignData.services,
@@ -113,25 +183,10 @@ export async function regeneratePost(
     platform: 'instagram',
   };
 
-  // Create calendar item from existing post data
-  const calendarItem: CalendarItem = {
-    date: new Date(existingPost.scheduled_date).toISOString().split('T')[0],
-    pillar: existingPost.content_pillar || 'General',
-    topic: existingPost.topic || existingPost.content_pillar || 'General content',
-    content_type: existingPost.content_type || 'image',
-    is_festival: existingPost.is_festival || false,
-    festival_name: existingPost.festival_name || undefined,
-  };
-
-  // Build a basic strategy for regeneration
-  const strategy = {
-    content_pillars: [calendarItem.pillar],
-    tone: 'warm and engaging',
-    cta_style: 'inviting',
-    content_mix: { education: 30, trust: 50, promotion: 20 },
-  };
-
-  // Regenerate caption
+  // ========================================================================
+  // REGENERATE CAPTION
+  // ========================================================================
+  
   const newCaption = await generateCaption(calendarItem, strategy, normalizedInput);
 
   let newImageUrl = existingPost.image_url;
@@ -140,7 +195,10 @@ export async function regeneratePost(
     imageModel: existingPost.image_model,
   };
 
-  // Regenerate image if requested
+  // ========================================================================
+  // REGENERATE IMAGE (if requested)
+  // ========================================================================
+  
   if (regenerateImage) {
     const imageResult = await generateImage(calendarItem, normalizedInput);
     const imageUrl = await uploadImageToStorage(
@@ -154,7 +212,10 @@ export async function regeneratePost(
     };
   }
 
-  // Update post in database
+  // ========================================================================
+  // UPDATE POST IN DATABASE
+  // ========================================================================
+  
   const updateData = {
     caption: newCaption,
     image_url: newImageUrl,
@@ -262,14 +323,27 @@ export async function addExtraPost(
     campaignId
   );
 
-  // Assemble post
-  const post = assemblePost(
-    imageUrl,
-    caption,
-    calendarItem,
-    imageResult.metadata.prompt || '',
-    imageResult.metadata.model
-  );
+  // Assemble post inline
+  const hashtagRegex = /#[\w\u0900-\u097F]+/g;
+  const hashtags = caption.match(hashtagRegex) || [];
+  
+  const post: PostItem = {
+    entryId: `post-${calendarItem.date.replace(/-/g, '')}`,
+    scheduledDate: new Date(calendarItem.date),
+    caption: caption,
+    hashtags: hashtags,
+    callToAction: calendarItem.is_festival ? 'Join us in celebrating!' : 'Learn more about our services',
+    imageUrl: imageUrl,
+    detailedImagePrompt: imageResult.metadata.prompt || '',
+    metadata: {
+      contentPillar: calendarItem.is_festival ? undefined : calendarItem.pillar,
+      festival: calendarItem.is_festival ? calendarItem.festival_name : undefined,
+      topic: calendarItem.topic,
+      imageModel: imageResult.metadata.model,
+      imageGenerated: true,
+      generatedAt: new Date(),
+    },
+  };
 
   // Save to database
   const savedIds = await savePostsToDB(campaignId, [post]);

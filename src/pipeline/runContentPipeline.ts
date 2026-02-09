@@ -10,7 +10,11 @@ import { normalizeInput } from '../services/normalizeInput';
 import { generateStrategy } from '../services/generateStrategy';
 import { generateCalendar } from '../services/generateCalendar';
 import { generatePosts } from '../services/generatePosts';
-import { savePostsToDB } from '../db/database';
+import { 
+  savePostsToDB, 
+  saveStrategyToDB, 
+  saveCalendarToDB 
+} from '../db/database';
 
 /**
  * Runs the complete content generation pipeline
@@ -69,6 +73,18 @@ export async function runContentPipeline(
     
     const strategy = await generateStrategy(normalizedInput);
 
+    // Save strategy to database
+    let strategyId: string | undefined;
+    if (campaignId) {
+      try {
+        strategyId = await saveStrategyToDB(campaignId, strategy);
+        console.log(`[Pipeline] ✓ Strategy saved: ${strategyId}`);
+      } catch (error) {
+        console.error('[Pipeline] ⚠ Failed to save strategy:', error);
+        // Continue without strategy_id - non-blocking
+      }
+    }
+
     // ========================================================================
     // STEP 3: FETCH FESTIVALS (if enabled)
     // ========================================================================
@@ -98,10 +114,21 @@ export async function runContentPipeline(
     // ========================================================================
     // STEP 4: GENERATE CONTENT CALENDAR
     // ========================================================================
-    // Creates posting schedule with festival integration
-    // Rule-based, synchronous, deterministic
+    // Creates posting schedule with festival integration and AI topics
+    // Now async due to AI-based topic generation
     
-    const calendar = generateCalendar(normalizedInput, strategy, festivals);
+    const calendar = await generateCalendar(normalizedInput, strategy, festivals, campaignId);
+
+    // Save calendar to database
+    if (campaignId && strategyId) {
+      try {
+        await saveCalendarToDB(campaignId, strategyId, calendar);
+        console.log(`[Pipeline] ✓ Calendar saved: ${calendar.length} entries`);
+      } catch (error) {
+        console.error('[Pipeline] ⚠ Failed to save calendar:', error);
+        // Continue without saved calendar - non-blocking
+      }
+    }
 
     // ========================================================================
     // STEP 5: GENERATE POSTS

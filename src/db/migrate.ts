@@ -45,6 +45,10 @@ async function runAllMigrations(): Promise<void> {
     await runMigration('002_create_posts_table.sql');
     await runMigration('003_create_social_accounts_table.sql');
     await runMigration('004_create_scheduled_posts_table.sql');
+    await runMigration('005_update_posts_for_prompt_based_generation.sql');
+    await runMigration('006_create_strategies_table.sql');
+    await runMigration('007_create_calendar_entries_table.sql');
+    await runMigration('008_add_campaign_goal_and_fks.sql');
     
     console.log('\n============================================================================');
     console.log('✅ All migrations completed successfully!');
@@ -54,6 +58,12 @@ async function runAllMigrations(): Promise<void> {
     console.log('  - posts');
     console.log('  - social_accounts');
     console.log('  - scheduled_posts');
+    console.log('  - strategies (v2 - AI strategy persistence)');
+    console.log('  - calendar_entries (v2 - content calendar)');
+    console.log('\nUpdates:');
+    console.log('  - posts: added detailed_image_prompt, nullable image_url');
+    console.log('  - campaigns: added campaign_goal field');
+    console.log('  - posts: added foreign keys to calendar_entries and strategies');
     
   } catch (error) {
     console.error('\n❌ Migration failed:', error);
