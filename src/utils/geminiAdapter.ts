@@ -1,12 +1,15 @@
 /**
- * Google Gemini Adapter
+ * Groq LLM Adapter
  * 
- * Provides OpenAI-compatible interface for Google Gemini API
+ * Provides OpenAI-compatible interface using Groq API
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 
-const genAI = new GoogleGenerativeAI(process.env.OPENAI_API_KEY || '');
+const groqClient = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1',
+});
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -30,52 +33,34 @@ interface ChatCompletion {
 }
 
 /**
- * OpenAI-compatible wrapper for Gemini
+ * OpenAI-compatible wrapper for Groq
  */
 export const geminiClient = {
   chat: {
     completions: {
       create: async (options: ChatCompletionOptions): Promise<ChatCompletion> => {
-        // Combine system and user messages for Gemini
-        const systemMessage = options.messages.find(m => m.role === 'system')?.content || '';
-        const userMessage = options.messages.find(m => m.role === 'user')?.content || '';
+        // Map model names to Groq models
+        let modelName = options.model || process.env.LLM_MODEL || 'llama-3.3-70b-versatile';
         
-        let prompt = userMessage;
-        if (systemMessage) {
-          prompt = `${systemMessage}\n\n${userMessage}`;
-        }
-        
-        // Add JSON instruction if needed
-        if (options.response_format?.type === 'json_object') {
-          prompt += '\n\nIMPORTANT: You must respond with valid JSON only. Do not include any text before or after the JSON.';
+        // Map common model names to Groq equivalents
+        if (modelName.includes('gpt') || modelName.includes('gemini')) {
+          modelName = 'llama-3.3-70b-versatile';
         }
 
-        // Get model - use gemini-pro as default (most stable)
-        let modelName = options.model || 'gemini-pro';
-        
-        // Map common model names to working Gemini models
-        if (modelName.includes('flash')) {
-          modelName = 'gemini-pro'; // Fallback to pro if flash not available
-        }
-        
-        const model = genAI.getGenerativeModel({ 
+        // Call Groq API (OpenAI-compatible)
+        const completion = await groqClient.chat.completions.create({
           model: modelName,
-          generationConfig: {
-            temperature: options.temperature,
-            maxOutputTokens: options.max_tokens,
-          },
+          messages: options.messages,
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          response_format: options.response_format,
         });
-
-        // Call Gemini
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
 
         return {
           choices: [
             {
               message: {
-                content: text,
+                content: completion.choices[0]?.message?.content || null,
               },
             },
           ],

@@ -585,7 +585,7 @@
         margin-top: 10px;
         max-height: 300px;
         overflow-y: auto;
-        font-family: 'Courier New', monospace;
+        font-family: "Courier New", monospace;
         font-size: 12px;
         white-space: pre-wrap;
       }
@@ -637,8 +637,13 @@
       }
 
       @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
       }
 
       .expectation-details {
@@ -669,18 +674,28 @@
         <h1>🎨 Social Scene Generator</h1>
         <p>AI-Powered Social Media Content Creation - Full Cycle Testing</p>
         <div class="header-actions">
-          <button class="header-btn" onclick="refreshCacheStats()">📊 Cache Stats</button>
-          <button class="header-btn" onclick="testAPIConnection()">🔌 Test API</button>
+          <button class="header-btn" onclick="refreshCacheStats()">
+            📊 Cache Stats
+          </button>
+          <button class="header-btn" onclick="testAPIConnection()">
+            🔌 Test API
+          </button>
         </div>
       </div>
 
       <div class="content">
         <!-- Tabs -->
         <div class="tabs">
-          <button class="tab active" onclick="switchTab('generate')"> Generate Content</button>
-          <button class="tab" onclick="switchTab('tests')"> Full Cycle Tests</button>
-          <button class="tab" onclick="switchTab('cache')"> Cache Management</button>
-          <button class="tab" onclick="switchTab('docs')"> Documentation</button>
+          <button class="tab active" onclick="switchTab('generate')">
+            Generate Content
+          </button>
+          <button class="tab" onclick="switchTab('tests')">
+            Full Cycle Tests
+          </button>
+          <button class="tab" onclick="switchTab('cache')">
+            Cache Management
+          </button>
+          <button class="tab" onclick="switchTab('docs')">Documentation</button>
         </div>
 
         <!-- Tab 1: Generate Content -->
@@ -688,120 +703,122 @@
           <div class="form-section">
             <h2 style="margin-bottom: 20px">Campaign Details</h2>
 
-          <div class="form-group">
-            <label for="industry">Industry / Business Type *</label>
-            <input
-              type="text"
-              id="industry"
-              placeholder="e.g., Coffee Shop, Fitness Studio, Digital Agency"
-              required
-            />
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
             <div class="form-group">
-              <label for="total_days">Campaign Duration (days)</label>
+              <label for="industry">Industry / Business Type *</label>
               <input
-                type="number"
-                id="total_days"
-                value="14"
-                min="7"
-                max="90"
+                type="text"
+                id="industry"
+                placeholder="e.g., Coffee Shop, Fitness Studio, Digital Agency"
+                required
               />
             </div>
 
-            <div class="form-group">
-              <label for="frequency">Posts Per Week</label>
-              <input type="number" id="frequency" value="3" min="1" max="7" />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Services Offered *</label>
-            <div class="services-input" id="servicesContainer">
-              <div class="service-item">
-                <input
-                  type="text"
-                  placeholder="Service 1"
-                  class="service-input"
-                />
-              </div>
-              <div class="service-item">
-                <input
-                  type="text"
-                  placeholder="Service 2"
-                  class="service-input"
-                />
-              </div>
-              <div class="service-item">
-                <input
-                  type="text"
-                  placeholder="Service 3"
-                  class="service-input"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="geography">Geography</label>
-            <select id="geography">
-              <option value="India">India</option>
-              <option value="USA">USA</option>
-              <option value="UK">UK</option>
-            </select>
-          </div>
-
-          <div class="form-group checkbox-group">
-            <input type="checkbox" id="festival_enabled" checked />
-            <label for="festival_enabled" style="margin-bottom: 0"
-              >Include Festival Posts</label
+            <div
+              style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px"
             >
-          </div>
-
-          <button class="btn" onclick="generateContent()">
-             Generate Content
-          </button>
-        </div>
-
-        <div id="loading" class="loading" style="display: none">
-          <div class="spinner"></div>
-          <p style="font-size: 1.2rem; color: #667eea">
-            Generating your content...
-          </p>
-          <p style="color: #999; margin-top: 10px">
-            This may take 30-90 seconds
-          </p>
-        </div>
-
-        <div id="error" class="error" style="display: none"></div>
-
-        <div id="results" class="results" style="display: none">
-          <div class="summary">
-            <h3>✅ Generation Complete!</h3>
-            <div class="summary-stats">
-              <div class="stat">
-                <div class="stat-value" id="totalPosts">0</div>
-                <div class="stat-label">Total Posts</div>
+              <div class="form-group">
+                <label for="total_days">Campaign Duration (days)</label>
+                <input
+                  type="number"
+                  id="total_days"
+                  value="14"
+                  min="7"
+                  max="90"
+                />
               </div>
-              <div class="stat">
-                <div class="stat-value" id="strategyPillars">0</div>
-                <div class="stat-label">Content Pillars</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value" id="festivalPosts">0</div>
-                <div class="stat-label">Festival Posts</div>
-              </div>
-              <div class="stat">
-                <div class="stat-value" id="processingTime">0s</div>
-                <div class="stat-label">Processing Time</div>
+
+              <div class="form-group">
+                <label for="frequency">Posts Per Week</label>
+                <input type="number" id="frequency" value="3" min="1" max="7" />
               </div>
             </div>
+
+            <div class="form-group">
+              <label>Services Offered *</label>
+              <div class="services-input" id="servicesContainer">
+                <div class="service-item">
+                  <input
+                    type="text"
+                    placeholder="Service 1"
+                    class="service-input"
+                  />
+                </div>
+                <div class="service-item">
+                  <input
+                    type="text"
+                    placeholder="Service 2"
+                    class="service-input"
+                  />
+                </div>
+                <div class="service-item">
+                  <input
+                    type="text"
+                    placeholder="Service 3"
+                    class="service-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="geography">Geography</label>
+              <select id="geography">
+                <option value="India">India</option>
+                <option value="USA">USA</option>
+                <option value="UK">UK</option>
+              </select>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <input type="checkbox" id="festival_enabled" checked />
+              <label for="festival_enabled" style="margin-bottom: 0"
+                >Include Festival Posts</label
+              >
+            </div>
+
+            <button class="btn" onclick="generateContent()">
+              Generate Content
+            </button>
           </div>
 
-          <h3 style="margin-bottom: 20px">Generated Posts</h3>
-          <div class="posts-grid" id="postsContainer"></div>
-        </div>
+          <div id="loading" class="loading" style="display: none">
+            <div class="spinner"></div>
+            <p style="font-size: 1.2rem; color: #667eea">
+              Generating your content...
+            </p>
+            <p style="color: #999; margin-top: 10px">
+              This may take 30-90 seconds
+            </p>
+          </div>
+
+          <div id="error" class="error" style="display: none"></div>
+
+          <div id="results" class="results" style="display: none">
+            <div class="summary">
+              <h3>✅ Generation Complete!</h3>
+              <div class="summary-stats">
+                <div class="stat">
+                  <div class="stat-value" id="totalPosts">0</div>
+                  <div class="stat-label">Total Posts</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value" id="strategyPillars">0</div>
+                  <div class="stat-label">Content Pillars</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value" id="festivalPosts">0</div>
+                  <div class="stat-label">Festival Posts</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value" id="processingTime">0s</div>
+                  <div class="stat-label">Processing Time</div>
+                </div>
+              </div>
+            </div>
+
+            <h3 style="margin-bottom: 20px">Generated Posts</h3>
+            <div class="posts-grid" id="postsContainer"></div>
+          </div>
         </div>
 
         <!-- Tab 2: Full Cycle Tests -->
@@ -822,16 +839,20 @@
             </ul>
           </div>
 
-          <button class="btn" onclick="runFullCycleTests()" style="margin-bottom: 30px">
-             Run All Tests
+          <button
+            class="btn"
+            onclick="runFullCycleTests()"
+            style="margin-bottom: 30px"
+          >
+            Run All Tests
           </button>
 
-          <div id="testProgress" style="display: none;">
+          <div id="testProgress" style="display: none">
             <h3 style="margin-bottom: 20px">Test Progress</h3>
             <div id="testExpectations"></div>
           </div>
 
-          <div id="testSummary" style="display: none;" class="summary">
+          <div id="testSummary" style="display: none" class="summary">
             <h3>Test Summary</h3>
             <div id="testSummaryContent"></div>
           </div>
@@ -841,7 +862,10 @@
         <div id="tab-cache" class="tab-content">
           <div class="info-card">
             <h3>💾 Cache Management</h3>
-            <p>View and manage the centralized cache layer that improves performance by 80-90%</p>
+            <p>
+              View and manage the centralized cache layer that improves
+              performance by 80-90%
+            </p>
           </div>
 
           <div class="test-section">
@@ -872,7 +896,11 @@
                 <div class="cache-stat-label">Total Sets</div>
               </div>
             </div>
-            <button class="btn" onclick="refreshCacheStats()" style="margin-top: 20px">
+            <button
+              class="btn"
+              onclick="refreshCacheStats()"
+              style="margin-top: 20px"
+            >
               🔄 Refresh Stats
             </button>
           </div>
@@ -880,17 +908,20 @@
           <div class="test-section">
             <h4>Clear Cache</h4>
             <div class="form-group">
-              <label for="clearPattern">Pattern (optional - clear all if empty)</label>
+              <label for="clearPattern"
+                >Pattern (optional - clear all if empty)</label
+              >
               <input
                 type="text"
                 id="clearPattern"
                 placeholder="e.g., strategy, festival, or leave empty for all"
               />
             </div>
-            <button class="btn" onclick="clearCache()">
-              🗑️ Clear Cache
-            </button>
-            <div id="clearCacheResult" style="margin-top: 15px; display: none;"></div>
+            <button class="btn" onclick="clearCache()">🗑️ Clear Cache</button>
+            <div
+              id="clearCacheResult"
+              style="margin-top: 15px; display: none"
+            ></div>
           </div>
         </div>
 
@@ -903,54 +934,63 @@
 
           <div class="test-section">
             <h4>Core Endpoints</h4>
-            <div style="margin: 15px 0;">
-              <strong>POST /api/v1/generate-content</strong><br>
+            <div style="margin: 15px 0">
+              <strong>POST /api/v1/generate-content</strong><br />
               Generate complete campaign with strategy, calendar, and posts
             </div>
-            <div style="margin: 15px 0;">
-              <strong>GET /health</strong><br>
+            <div style="margin: 15px 0">
+              <strong>GET /health</strong><br />
               Check API server health and service availability
             </div>
           </div>
 
           <div class="test-section">
             <h4>Post Management</h4>
-            <div style="margin: 15px 0;">
-              <strong>PUT /api/v1/posts/:postId</strong><br>
+            <div style="margin: 15px 0">
+              <strong>PUT /api/v1/posts/:postId</strong><br />
               Edit post caption, hashtags, or call-to-action
             </div>
-            <div style="margin: 15px 0;">
-              <strong>POST /api/v1/posts/:postId/regenerate</strong><br>
+            <div style="margin: 15px 0">
+              <strong>POST /api/v1/posts/:postId/regenerate</strong><br />
               Regenerate post caption and/or image using AI
             </div>
-            <div style="margin: 15px 0;">
-              <strong>DELETE /api/v1/posts/:postId</strong><br>
+            <div style="margin: 15px 0">
+              <strong>DELETE /api/v1/posts/:postId</strong><br />
               Permanently delete a post from database
             </div>
-            <div style="margin: 15px 0;">
-              <strong>POST /api/v1/campaigns/:campaignId/posts/add</strong><br>
+            <div style="margin: 15px 0">
+              <strong>POST /api/v1/campaigns/:campaignId/posts/add</strong
+              ><br />
               Add an extra post for a specific date
             </div>
           </div>
 
           <div class="test-section">
             <h4>Cache Management</h4>
-            <div style="margin: 15px 0;">
-              <strong>GET /api/v1/cache/stats</strong><br>
+            <div style="margin: 15px 0">
+              <strong>GET /api/v1/cache/stats</strong><br />
               View cache statistics (hits, misses, hit rate, size)
             </div>
-            <div style="margin: 15px 0;">
-              <strong>POST /api/v1/cache/clear</strong><br>
+            <div style="margin: 15px 0">
+              <strong>POST /api/v1/cache/clear</strong><br />
               Clear all cache or specific pattern
             </div>
           </div>
 
           <div class="test-section">
             <h4>Performance Metrics</h4>
-            <ul style="margin-left: 20px; color: #555;">
-              <li><strong>Phase 1</strong>: Data Consistency (Duplicate Detection, Persisted Data)</li>
-              <li><strong>Phase 2</strong>: Performance (48% faster - 65s → 33.5s)</li>
-              <li><strong>Phase 3</strong>: Caching (15-25% additional improvement)</li>
+            <ul style="margin-left: 20px; color: #555">
+              <li>
+                <strong>Phase 1</strong>: Data Consistency (Duplicate Detection,
+                Persisted Data)
+              </li>
+              <li>
+                <strong>Phase 2</strong>: Performance (48% faster - 65s → 33.5s)
+              </li>
+              <li>
+                <strong>Phase 3</strong>: Caching (15-25% additional
+                improvement)
+              </li>
               <li><strong>Overall</strong>: 57-62% faster than baseline</li>
             </ul>
           </div>
@@ -967,8 +1007,10 @@
         </div>
 
         <div id="error" class="error" style="display: none"></div>
-
-        <div id="results" class="results" style="display: none">
+      </div>
+      <!-- end content -->
+    </div>
+    <!-- end container -->
 
     <!-- Edit Caption Modal -->
     <div id="editModal" class="modal">
@@ -1044,11 +1086,14 @@
         <div class="form-group">
           <label for="editPromptText">Image Generation Prompt</label>
           <textarea id="editPromptText" rows="8"></textarea>
-          <p style="color: #666; font-size: 12px; margin-top: 5px;">
-            Describe the image you want to generate. Be specific about style, elements, colors, and mood.
+          <p style="color: #666; font-size: 12px; margin-top: 5px">
+            Describe the image you want to generate. Be specific about style,
+            elements, colors, and mood.
           </p>
         </div>
-        <button class="btn" onclick="saveEditedPrompt()">Save & Generate Image</button>
+        <button class="btn" onclick="saveEditedPrompt()">
+          Save & Generate Image
+        </button>
       </div>
     </div>
 
@@ -1076,19 +1121,19 @@
       // Tab switching
       function switchTab(tabName) {
         // Hide all tabs
-        document.querySelectorAll('.tab-content').forEach(tab => {
-          tab.classList.remove('active');
+        document.querySelectorAll(".tab-content").forEach((tab) => {
+          tab.classList.remove("active");
         });
-        document.querySelectorAll('.tab').forEach(tab => {
-          tab.classList.remove('active');
+        document.querySelectorAll(".tab").forEach((tab) => {
+          tab.classList.remove("active");
         });
 
         // Show selected tab
-        document.getElementById(`tab-${tabName}`).classList.add('active');
-        event.target.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add("active");
+        event.target.classList.add("active");
 
         // Load cache stats if cache tab
-        if (tabName === 'cache') {
+        if (tabName === "cache") {
           refreshCacheStats();
         }
       }
@@ -1098,11 +1143,11 @@
         try {
           const response = await fetch(`${API_BASE_URL}/health`);
           const data = await response.json();
-          
+
           if (data.success) {
             showSuccessMessage(`✅ API Connected: ${data.data.status}`);
           } else {
-            showError('API responded but reported issues');
+            showError("API responded but reported issues");
           }
         } catch (error) {
           showError(`Failed to connect to API: ${error.message}`);
@@ -1117,211 +1162,232 @@
 
           if (data.success) {
             const stats = data.data;
-            document.getElementById('cacheHits').textContent = stats.hits;
-            document.getElementById('cacheMisses').textContent = stats.misses;
-            document.getElementById('cacheHitRate').textContent = stats.hitRate;
-            document.getElementById('cacheSize').textContent = stats.size;
-            document.getElementById('cacheEvictions').textContent = stats.evictions;
-            document.getElementById('cacheSets').textContent = stats.sets;
-            
-            showSuccessMessage('Cache stats refreshed');
+            document.getElementById("cacheHits").textContent = stats.hits;
+            document.getElementById("cacheMisses").textContent = stats.misses;
+            document.getElementById("cacheHitRate").textContent = stats.hitRate;
+            document.getElementById("cacheSize").textContent = stats.size;
+            document.getElementById("cacheEvictions").textContent =
+              stats.evictions;
+            document.getElementById("cacheSets").textContent = stats.sets;
+
+            showSuccessMessage("Cache stats refreshed");
           }
         } catch (error) {
-          console.error('Error fetching cache stats:', error);
-          showError('Failed to fetch cache stats');
+          console.error("Error fetching cache stats:", error);
+          showError("Failed to fetch cache stats");
         }
       }
 
       async function clearCache() {
-        const pattern = document.getElementById('clearPattern').value.trim();
-        
+        const pattern = document.getElementById("clearPattern").value.trim();
+
         try {
           const response = await fetch(`${API_BASE_URL}/api/v1/cache/clear`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pattern: pattern || undefined })
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pattern: pattern || undefined }),
           });
 
           const data = await response.json();
 
           if (data.success) {
-            const resultDiv = document.getElementById('clearCacheResult');
-            resultDiv.className = 'success-message';
+            const resultDiv = document.getElementById("clearCacheResult");
+            resultDiv.className = "success-message";
             resultDiv.textContent = data.data.message;
-            resultDiv.style.display = 'block';
-            
+            resultDiv.style.display = "block";
+
             // Refresh stats
             await refreshCacheStats();
           }
         } catch (error) {
-          console.error('Error clearing cache:', error);
-          showError('Failed to clear cache');
+          console.error("Error clearing cache:", error);
+          showError("Failed to clear cache");
         }
       }
 
       // Full Cycle Testing
       const expectations = [
         {
-          id: 'api-health',
-          title: 'API Health Check',
-          description: 'Verify API server is running and responsive',
+          id: "api-health",
+          title: "API Health Check",
+          description: "Verify API server is running and responsive",
           test: async () => {
             const response = await fetch(`${API_BASE_URL}/health`);
             const data = await response.json();
-            return data.success && data.data.status === 'ok';
-          }
+            return data.success && data.data.status === "ok";
+          },
         },
         {
-          id: 'generate-campaign',
-          title: 'Generate Campaign',
-          description: 'Create new campaign with strategy, calendar, and posts',
+          id: "generate-campaign",
+          title: "Generate Campaign",
+          description: "Create new campaign with strategy, calendar, and posts",
           test: async () => {
-            const response = await fetch(`${API_BASE_URL}/api/v1/generate-content`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                input: {
-                  industry: 'Coffee Shop',
-                  total_days: 7,
-                  frequency_per_week: 3,
-                  festival_enabled: true,
-                  services: ['Espresso', 'Pastries', 'Latte Art Classes'],
-                  geography: 'India',
-                  logo_url: 'https://example.com/logo.png',
-                  font_style: 'Roboto',
-                  accent_color: '#667eea',
-                  base_color: '#764ba2'
-                }
-              })
-            });
+            const response = await fetch(
+              `${API_BASE_URL}/api/v1/generate-content`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  input: {
+                    industry: "Coffee Shop",
+                    total_days: 7,
+                    frequency_per_week: 3,
+                    festival_enabled: true,
+                    services: ["Espresso", "Pastries", "Latte Art Classes"],
+                    geography: "India",
+                    logo_url: "https://example.com/logo.png",
+                    font_style: "Roboto",
+                    accent_color: "#667eea",
+                    base_color: "#764ba2",
+                  },
+                }),
+              },
+            );
             const data = await response.json();
-            
+
             if (data.success) {
               window.testCampaignId = data.data.campaign_id;
               window.testPosts = data.data.output.posts;
-              window.testFirstPostId = data.data.output.posts[0].postId || data.data.output.posts[0].post_id;
-              return data.data.output.posts.length > 0 && data.data.summary.strategyPillars > 0;
+              window.testFirstPostId =
+                data.data.output.posts[0].postId ||
+                data.data.output.posts[0].post_id;
+              return (
+                data.data.output.posts.length > 0 &&
+                data.data.summary.strategyPillars > 0
+              );
             }
             return false;
-          }
+          },
         },
         {
-          id: 'cache-strategy',
-          title: 'Strategy Cached',
-          description: 'Verify strategy was cached for reuse',
+          id: "cache-strategy",
+          title: "Strategy Cached",
+          description: "Verify strategy was cached for reuse",
           test: async () => {
             const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
             const data = await response.json();
             return data.success && data.data.hits >= 0 && data.data.sets > 0;
-          }
+          },
         },
         {
-          id: 'edit-post',
-          title: 'Edit Post Caption',
-          description: 'Update post caption and verify changes persist',
+          id: "edit-post",
+          title: "Edit Post Caption",
+          description: "Update post caption and verify changes persist",
           test: async () => {
             if (!window.testFirstPostId) return false;
-            
-            const response = await fetch(`${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                caption: 'EDITED: This caption was updated via API test'
-              })
-            });
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  caption: "EDITED: This caption was updated via API test",
+                }),
+              },
+            );
             const data = await response.json();
             return data.success;
-          }
+          },
         },
         {
-          id: 'regenerate-caption',
-          title: 'Regenerate Post Caption',
-          description: 'Generate new caption using persisted calendar data',
+          id: "regenerate-caption",
+          title: "Regenerate Post Caption",
+          description: "Generate new caption using persisted calendar data",
           test: async () => {
             if (!window.testFirstPostId) return false;
-            
-            const response = await fetch(`${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}/regenerate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ regenerateImage: false })
-            });
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}/regenerate`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ regenerateImage: false }),
+              },
+            );
             const data = await response.json();
             return data.success && data.data.post.caption;
-          }
+          },
         },
         {
-          id: 'add-extra-post',
-          title: 'Add Extra Post',
-          description: 'Create additional post for specific date',
+          id: "add-extra-post",
+          title: "Add Extra Post",
+          description: "Create additional post for specific date",
           test: async () => {
             if (!window.testCampaignId) return false;
-            
+
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            const dateStr = tomorrow.toISOString().split('T')[0];
-            
-            const response = await fetch(`${API_BASE_URL}/api/v1/campaigns/${window.testCampaignId}/posts/add`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                date: dateStr,
-                pillar: 'Behind the Scenes',
-                topic: 'Coffee roasting process'
-              })
-            });
+            const dateStr = tomorrow.toISOString().split("T")[0];
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/v1/campaigns/${window.testCampaignId}/posts/add`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  date: dateStr,
+                  pillar: "Behind the Scenes",
+                  topic: "Coffee roasting process",
+                }),
+              },
+            );
             const data = await response.json();
-            
+
             if (data.success) {
               window.testExtraPostId = data.data.post.post_id;
               return true;
             }
             return false;
-          }
+          },
         },
         {
-          id: 'delete-post',
-          title: 'Delete Post',
-          description: 'Remove post from database',
+          id: "delete-post",
+          title: "Delete Post",
+          description: "Remove post from database",
           test: async () => {
             if (!window.testExtraPostId) return false;
-            
-            const response = await fetch(`${API_BASE_URL}/api/v1/posts/${window.testExtraPostId}`, {
-              method: 'DELETE'
-            });
+
+            const response = await fetch(
+              `${API_BASE_URL}/api/v1/posts/${window.testExtraPostId}`,
+              {
+                method: "DELETE",
+              },
+            );
             const data = await response.json();
             return data.success;
-          }
+          },
         },
         {
-          id: 'cache-hit-rate',
-          title: 'Cache Performance',
-          description: 'Verify cache is improving performance',
+          id: "cache-hit-rate",
+          title: "Cache Performance",
+          description: "Verify cache is improving performance",
           test: async () => {
             const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
             const data = await response.json();
-            
+
             if (data.success) {
               const hitRate = parseFloat(data.data.hitRate);
               return hitRate >= 0; // Any hit rate is acceptable for test
             }
             return false;
-          }
-        }
+          },
+        },
       ];
 
       async function runFullCycleTests() {
-        const progressDiv = document.getElementById('testProgress');
-        const expectationsDiv = document.getElementById('testExpectations');
-        const summaryDiv = document.getElementById('testSummary');
-        
-        progressDiv.style.display = 'block';
-        summaryDiv.style.display = 'none';
-        expectationsDiv.innerHTML = '';
+        const progressDiv = document.getElementById("testProgress");
+        const expectationsDiv = document.getElementById("testExpectations");
+        const summaryDiv = document.getElementById("testSummary");
+
+        progressDiv.style.display = "block";
+        summaryDiv.style.display = "none";
+        expectationsDiv.innerHTML = "";
 
         // Create expectation items
-        expectations.forEach(exp => {
-          const item = document.createElement('div');
-          item.className = 'expectation-item';
+        expectations.forEach((exp) => {
+          const item = document.createElement("div");
+          item.className = "expectation-item";
           item.id = `exp-${exp.id}`;
           item.innerHTML = `
             <div class="expectation-status pending" id="status-${exp.id}">⏳</div>
@@ -1342,45 +1408,45 @@
         for (const exp of expectations) {
           const statusEl = document.getElementById(`status-${exp.id}`);
           const timeEl = document.getElementById(`time-${exp.id}`);
-          
-          statusEl.className = 'expectation-status testing';
-          statusEl.textContent = '⏳';
+
+          statusEl.className = "expectation-status testing";
+          statusEl.textContent = "⏳";
 
           const testStart = Date.now();
-          
+
           try {
             const result = await exp.test();
             const duration = Date.now() - testStart;
-            
+
             if (result) {
-              statusEl.className = 'expectation-status passed';
-              statusEl.textContent = '✅';
+              statusEl.className = "expectation-status passed";
+              statusEl.textContent = "✅";
               timeEl.textContent = `${duration}ms`;
               passed++;
             } else {
-              statusEl.className = 'expectation-status failed';
-              statusEl.textContent = '❌';
+              statusEl.className = "expectation-status failed";
+              statusEl.textContent = "❌";
               timeEl.textContent = `${duration}ms`;
               failed++;
             }
           } catch (error) {
             console.error(`Test ${exp.id} failed:`, error);
             const duration = Date.now() - testStart;
-            statusEl.className = 'expectation-status failed';
-            statusEl.textContent = '❌';
+            statusEl.className = "expectation-status failed";
+            statusEl.textContent = "❌";
             timeEl.textContent = `${duration}ms (error)`;
             failed++;
           }
 
           // Small delay between tests
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
         const totalTime = Date.now() - startTime;
 
         // Show summary
-        summaryDiv.style.display = 'block';
-        const summaryContent = document.getElementById('testSummaryContent');
+        summaryDiv.style.display = "block";
+        const summaryContent = document.getElementById("testSummaryContent");
         summaryContent.innerHTML = `
           <div class="summary-stats">
             <div class="stat">
@@ -1405,7 +1471,7 @@
           </div>
         `;
 
-        summaryDiv.scrollIntoView({ behavior: 'smooth' });
+        summaryDiv.scrollIntoView({ behavior: "smooth" });
       }
 
       async function generateContent() {
@@ -1517,27 +1583,28 @@
           postCard.className = "post-card";
           const postId = post.postId || post.post_id; // Handle both formats
           postCard.id = `post-${postId}`;
-          
+
           // Handle all possible field name variations for image prompt
-          let imagePrompt = post.detailedImagePrompt || 
-                           post.detailed_image_prompt || 
-                           post.imagePrompt || 
-                           post.image_prompt ||
-                           post.metadata?.detailedImagePrompt ||
-                           post.metadata?.detailed_image_prompt ||
-                           '';
-          
+          let imagePrompt =
+            post.detailedImagePrompt ||
+            post.detailed_image_prompt ||
+            post.imagePrompt ||
+            post.image_prompt ||
+            post.metadata?.detailedImagePrompt ||
+            post.metadata?.detailed_image_prompt ||
+            "";
+
           // Check if prompt is actually empty or null
-          if (!imagePrompt || imagePrompt.trim() === '') {
-            imagePrompt = 'No image prompt available';
+          if (!imagePrompt || imagePrompt.trim() === "") {
+            imagePrompt = "No image prompt available";
           }
-          
+
           // Debug log to see what we're getting
           console.log(`Post ${index + 1}:`, {
             postId,
             detailedImagePrompt: post.detailedImagePrompt,
             detailed_image_prompt: post.detailed_image_prompt,
-            finalPrompt: imagePrompt
+            finalPrompt: imagePrompt,
           });
 
           postCard.innerHTML = `
@@ -1736,7 +1803,8 @@
 
           if (data.success) {
             const post = data.data.post;
-            const imagePrompt = post.detailed_image_prompt || 'No image prompt available';
+            const imagePrompt =
+              post.detailed_image_prompt || "No image prompt available";
 
             // Update the post card with new content
             postCard.innerHTML = `
@@ -1830,14 +1898,26 @@
       }
 
       function openAddPostModal() {
+        console.log("Opening Add Post Modal...");
+
         // Set today's date as default
         const today = new Date().toISOString().split("T")[0];
+
+        const modal = document.getElementById("addPostModal");
+        if (!modal) {
+          console.error("Modal element not found!");
+          alert("Error: Modal element not found. Please refresh the page.");
+          return;
+        }
+
         document.getElementById("addPostDate").value = today;
         document.getElementById("addPostPillar").value = "";
         document.getElementById("addPostTopic").value = "";
         document.getElementById("addPostLoading").style.display = "none";
         document.getElementById("addPostSuccess").style.display = "none";
-        document.getElementById("addPostModal").style.display = "flex";
+        modal.style.display = "flex";
+
+        console.log("Modal should now be visible");
       }
 
       function closeAddPostModal() {
@@ -1987,13 +2067,13 @@
       function togglePrompt(postId) {
         const content = document.getElementById(`prompt-content-${postId}`);
         const icon = document.getElementById(`toggle-${postId}`);
-        
-        if (content.classList.contains('collapsed')) {
-          content.classList.remove('collapsed');
-          icon.classList.remove('collapsed');
+
+        if (content.classList.contains("collapsed")) {
+          content.classList.remove("collapsed");
+          icon.classList.remove("collapsed");
         } else {
-          content.classList.add('collapsed');
-          icon.classList.add('collapsed');
+          content.classList.add("collapsed");
+          icon.classList.add("collapsed");
         }
       }
 
@@ -2015,7 +2095,9 @@
       async function saveEditedPrompt() {
         if (!currentEditingPromptPostId) return;
 
-        const newPrompt = document.getElementById("editPromptText").value.trim();
+        const newPrompt = document
+          .getElementById("editPromptText")
+          .value.trim();
         if (!newPrompt) {
           alert("Prompt cannot be empty");
           return;
@@ -2023,10 +2105,12 @@
 
         // Close modal and show loading
         closeEditPromptModal();
-        
-        const postCard = document.getElementById(`post-${currentEditingPromptPostId}`);
+
+        const postCard = document.getElementById(
+          `post-${currentEditingPromptPostId}`,
+        );
         const originalHTML = postCard.innerHTML;
-        
+
         postCard.innerHTML = `
           <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
             <div style="text-align: center;">
@@ -2043,31 +2127,34 @@
             {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ detailedImagePrompt: newPrompt })
-            }
+              body: JSON.stringify({ imagePrompt: newPrompt }),
+            },
           );
 
           if (!updateResponse.ok) {
-            throw new Error('Failed to update prompt');
+            throw new Error("Failed to update prompt");
           }
 
           // Then generate image with the new prompt
           await generateImageWithPrompt(currentEditingPromptPostId, newPrompt);
-          
         } catch (error) {
           console.error("Error updating prompt:", error);
           postCard.innerHTML = originalHTML;
-          showError("Failed to update prompt and generate image: " + error.message);
+          showError(
+            "Failed to update prompt and generate image: " + error.message,
+          );
         }
       }
 
       async function generateImageWithPrompt(postId, customPrompt = null) {
         const imgElement = document.getElementById(`img-${postId}`);
         const promptElement = document.getElementById(`prompt-${postId}`);
-        const prompt = customPrompt || promptElement?.textContent || '';
-        
-        if (!prompt || prompt === 'No image prompt available') {
-          alert('No image prompt available. Please regenerate the post to get a new prompt.');
+        const prompt = customPrompt || promptElement?.textContent || "";
+
+        if (!prompt || prompt === "No image prompt available") {
+          alert(
+            "No image prompt available. Please regenerate the post to get a new prompt.",
+          );
           return;
         }
 
@@ -2090,21 +2177,24 @@
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt: prompt })
-            }
+              body: JSON.stringify({ prompt: prompt }),
+            },
           );
 
           const data = await response.json();
 
           if (data.success) {
             // Reload the post from server to get updated data
-            const postResponse = await fetch(`${API_BASE_URL}/api/v1/posts/${postId}`);
+            const postResponse = await fetch(
+              `${API_BASE_URL}/api/v1/posts/${postId}`,
+            );
             const postData = await postResponse.json();
-            
+
             if (postData.success) {
               const post = postData.data;
-              const imagePrompt = post.detailed_image_prompt || 'No image prompt available';
-              
+              const imagePrompt =
+                post.detailed_image_prompt || "No image prompt available";
+
               postCard.innerHTML = `
                 <img src="${post.image_url}?t=${Date.now()}" alt="Generated post" class="post-image" id="img-${postId}" />
                 <div class="post-content">
@@ -2137,7 +2227,7 @@
                   </div>
                 </div>
               `;
-              
+
               showSuccessMessage("Image generated successfully!");
             }
           } else {
@@ -2152,7 +2242,11 @@
       }
 
       async function regenerateImagePrompt(postId) {
-        if (!confirm('This will generate a new image prompt and create a new image. Continue?')) {
+        if (
+          !confirm(
+            "This will generate a new image prompt and create a new image. Continue?",
+          )
+        ) {
           return;
         }
 
@@ -2175,15 +2269,16 @@
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ regenerateImage: true })
-            }
+              body: JSON.stringify({ regenerateImage: true }),
+            },
           );
 
           const data = await response.json();
 
           if (data.success) {
             const post = data.data.post;
-            const imagePrompt = post.detailed_image_prompt || 'No image prompt available';
+            const imagePrompt =
+              post.detailed_image_prompt || "No image prompt available";
 
             postCard.innerHTML = `
               <img src="${post.image_url}?t=${Date.now()}" alt="Regenerated post" class="post-image" id="img-${postId}" />

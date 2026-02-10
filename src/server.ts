@@ -432,10 +432,10 @@ app.get(
 );
 
 /**
- * Edit post caption/image
+ * Edit post caption/image/prompt
  * PUT /api/v1/posts/:postId
  * 
- * Request body: { caption?, imageUrl?, hashtags?, callToAction? }
+ * Request body: { caption?, imageUrl?, imagePrompt?, hashtags?, callToAction? }
  */
 app.put(
   '/api/v1/posts/:postId',

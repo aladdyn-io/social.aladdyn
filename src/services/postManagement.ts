@@ -36,6 +36,7 @@ export async function editPost(
   updates: {
     caption?: string;
     imageUrl?: string;
+    imagePrompt?: string;
     hashtags?: string[];
     callToAction?: string;
   }
@@ -58,6 +59,9 @@ export async function editPost(
   }
   if (updates.imageUrl !== undefined) {
     updateData.image_url = updates.imageUrl;
+  }
+  if (updates.imagePrompt !== undefined) {
+    updateData.image_prompt = updates.imagePrompt;
   }
   if (updates.hashtags !== undefined) {
     updateData.hashtags = updates.hashtags;

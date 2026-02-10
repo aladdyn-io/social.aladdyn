@@ -16,11 +16,15 @@ import OpenAI from 'openai';
 import { ContentInput, Strategy, CampaignPhase } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { isTopicDuplicate } from '../db/database';
+import { geminiClient } from '../utils/geminiAdapter';
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL,
-});
+// Use Gemini adapter (configured for Groq) if LLM_PROVIDER is set, otherwise use OpenAI
+const client = process.env.LLM_PROVIDER === 'gemini' 
+  ? geminiClient 
+  : new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.OPENAI_BASE_URL,
+    });
 
 interface TopicRequest {
   dayNumber: number;
