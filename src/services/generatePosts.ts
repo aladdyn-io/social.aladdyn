@@ -79,7 +79,8 @@ export async function generatePosts(
             entryId: `${entry.date}-${entry.pillar}`,
             scheduledDate: new Date(entry.date),
             caption: caption,
-            hashtags: extractHashtags(caption),
+            hashtags: generateHashtags(entry, input),
+            callToAction: generateCTA(entry, strategy),
             detailedImagePrompt: detailedPrompt,
             imageUrl: null, // No image yet - generated on-demand
             metadata: {
@@ -88,6 +89,7 @@ export async function generatePosts(
               generatedAt: new Date(),
               topic: entry.topic,
               imageGenerated: false,
+              imageModel: undefined, // Set when image is generated
             },
           };
 
@@ -124,11 +126,63 @@ export async function generatePosts(
 }
 
 /**
- * Extract hashtags from caption
- * WHY: Make hashtags easily accessible as array
+ * Generate relevant hashtags for a post
+ * WHY: Hashtags improve discoverability on social media
  */
-function extractHashtags(caption: string): string[] {
-  const hashtagRegex = /#[\w\u0900-\u097F]+/g;
-  const matches = caption.match(hashtagRegex);
-  return matches || [];
+function generateHashtags(entry: CalendarItem, input: NormalizedInput): string[] {
+  const hashtags: string[] = [];
+  
+  // Industry/business hashtag
+  const industryTag = input.industry.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+  if (industryTag) hashtags.push(`#${industryTag}`);
+  
+  // Service hashtags (first 2)
+  input.services.slice(0, 2).forEach(service => {
+    const serviceTag = service.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (serviceTag) hashtags.push(`#${serviceTag}`);
+  });
+  
+  // Festival hashtag if applicable
+  if (entry.is_festival && entry.festival_name) {
+    const festivalTag = entry.festival_name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (festivalTag) hashtags.push(`#${festivalTag}`);
+  }
+  
+  // Geography hashtag
+  if (input.geography !== 'Global') {
+    const geoTag = input.geography.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (geoTag) hashtags.push(`#${geoTag}`);
+  }
+  
+  // Generic social media hashtags
+  hashtags.push('#SocialMedia');
+  
+  return hashtags.slice(0, 7); // Max 7 hashtags
+}
+
+/**
+ * Generate call-to-action text
+ * WHY: Separate CTA makes it easier to customize and track
+ */
+function generateCTA(entry: CalendarItem, strategy: any): string {
+  if (entry.is_festival) {
+    const festivalCTAs = [
+      'Join us in celebrating!',
+      'Let\'s celebrate together!',
+      'Share the joy with us!',
+      'Be part of the celebration!'
+    ];
+    return festivalCTAs[Math.floor(Math.random() * festivalCTAs.length)];
+  }
+  
+  // Regular post CTAs based on strategy tone
+  const ctaOptions = [
+    'Learn more about our services',
+    'Get in touch with us today',
+    'Visit us to experience the difference',
+    'Contact us for more details',
+    'Discover what we can do for you'
+  ];
+  
+  return ctaOptions[Math.floor(Math.random() * ctaOptions.length)];
 }

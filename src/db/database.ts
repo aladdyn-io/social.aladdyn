@@ -204,6 +204,7 @@ export async function savePostsToDB(
           hashtags,
           call_to_action,
           image_url,
+          image_prompt,
           detailed_image_prompt,
           image_model,
           content_pillar,
@@ -213,7 +214,7 @@ export async function savePostsToDB(
           festival_name,
           status
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
         )
         RETURNING post_id
       `;
@@ -225,6 +226,7 @@ export async function savePostsToDB(
         post.hashtags,
         post.callToAction || null,
         post.imageUrl, // null until image generated on-demand
+        null, // image_prompt - short version (not used in new workflow)
         post.detailedImagePrompt, // comprehensive prompt
         post.metadata.imageModel || null, // null until image generated
         post.metadata.contentPillar || null,

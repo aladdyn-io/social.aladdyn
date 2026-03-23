@@ -327,9 +327,8 @@ export async function addExtraPost(
     campaignId
   );
 
-  // Assemble post inline
-  const hashtagRegex = /#[\w\u0900-\u097F]+/g;
-  const hashtags = caption.match(hashtagRegex) || [];
+  // Generate hashtags
+  const hashtags = generateHashtags(calendarItem, normalizedInput);
   
   const post: PostItem = {
     entryId: `post-${calendarItem.date.replace(/-/g, '')}`,
@@ -357,4 +356,39 @@ export async function addExtraPost(
 
   console.log(`[PostManagement] ✓ Extra post created: ${savedIds[0]}`);
   return savedPost;
+}
+
+/**
+ * Generate relevant hashtags for a post
+ * WHY: Hashtags improve discoverability on social media
+ */
+function generateHashtags(entry: CalendarItem, input: NormalizedInput): string[] {
+  const hashtags: string[] = [];
+  
+  // Industry/business hashtag
+  const industryTag = input.industry.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+  if (industryTag) hashtags.push(`#${industryTag}`);
+  
+  // Service hashtags (first 2)
+  input.services.slice(0, 2).forEach(service => {
+    const serviceTag = service.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (serviceTag) hashtags.push(`#${serviceTag}`);
+  });
+  
+  // Festival hashtag if applicable
+  if (entry.is_festival && entry.festival_name) {
+    const festivalTag = entry.festival_name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (festivalTag) hashtags.push(`#${festivalTag}`);
+  }
+  
+  // Geography hashtag
+  if (input.geography !== 'Global') {
+    const geoTag = input.geography.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (geoTag) hashtags.push(`#${geoTag}`);
+  }
+  
+  // Generic social media hashtags
+  hashtags.push('#SocialMedia');
+  
+  return hashtags.slice(0, 7); // Max 7 hashtags
 }
