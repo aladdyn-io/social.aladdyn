@@ -323,9 +323,16 @@ class ReplicateGenerator implements ImageGenerator {
     });
   }
 
+  /** Generate using a fully-formed detailed prompt (on-demand path). */
+  async generateFromDetailedPrompt(detailedPrompt: string): Promise<ImageGenerationResult> {
+    return this.runReplicate(detailedPrompt);
+  }
+
   async generate(prompt: ImagePrompt): Promise<ImageGenerationResult> {
-    const fullPrompt = this.buildModelPrompt(prompt);
-    
+    return this.runReplicate(this.buildModelPrompt(prompt));
+  }
+
+  private async runReplicate(fullPrompt: string): Promise<ImageGenerationResult> {
     console.log(`[ImageGenerator] Generating with Replicate (${this.model})...`);
     console.log(`[ImageGenerator] Prompt: ${fullPrompt.substring(0, 100)}...`);
 
@@ -533,11 +540,42 @@ class HuggingFaceGenerator implements ImageGenerator {
 // ============================================================================
 
 /**
+ * Generates image from a pre-written detailed prompt (on-demand workflow).
+ *
+ * Uses Replicate (FLUX schnell) when IMAGE_PROVIDER=replicate, otherwise local.
+ * The prompt is taken directly from the post's stored imagePrompt field so the
+ * AI-crafted context is preserved.
+ */
+export async function generateImageFromPrompt(
+  detailedPrompt: string
+): Promise<ImageGenerationResult> {
+  const provider = process.env.IMAGE_PROVIDER || 'local';
+
+  if (provider === 'replicate') {
+    const generator = new ReplicateGenerator();
+    // Bypass buildModelPrompt — use the detailed prompt verbatim
+    return generator.generateFromDetailedPrompt(detailedPrompt);
+  }
+
+  // Fallback: local placeholder
+  const localGen = new LocalGenerator();
+  const dummyPrompt: ImagePrompt = {
+    topic: detailedPrompt.slice(0, 80),
+    industry: 'Business',
+    pillar: 'Content',
+    brandColors: { base: '#764ba2', accent: '#667eea' },
+    contentType: 'photo',
+    isFestival: false,
+  };
+  return localGen.generate(dummyPrompt);
+}
+
+/**
  * Generates image for a calendar item
- * 
+ *
  * WHY: Single entry point for image generation across the app
  * WHY: Hides implementation details from calling code
- * 
+ *
  * @param calendarItem - Calendar entry to generate image for
  * @param normalized - Normalized campaign input
  * @returns Image generation result with buffer and metadata

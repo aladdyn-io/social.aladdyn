@@ -1,906 +1,177 @@
 /**
- * Database Module
- * 
- * Responsibility: Read/Write campaign and post data to PostgreSQL
- * NO AI - Pure database operations
- * 
- * WHY: Centralized database access with proper connection pooling
+ * Database Module — Prisma edition
+ *
+ * All reads/writes go to the `social.*` schema via Prisma.
+ * The old raw-pg Pool has been removed.
  */
 
-import { Pool } from 'pg';
-import { PostItem, Strategy, CalendarItem, CampaignPhase, ContentInput } from '../types/content';
-
-/**
- * PostgreSQL connection pool
- * WHY: Connection pooling for better performance
- */
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20, // Maximum pool size
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // 10 seconds to establish connection
-  statement_timeout: 30000, // 30 seconds for queries to complete
-  query_timeout: 30000, // 30 seconds query timeout
-});
-
-// Test connection on startup
-pool.on('error', (err) => {
-  console.error('[Database] Unexpected pool error:', err);
-});
+import prisma from '../lib/prisma';
+import { PostItem, Strategy, CalendarItem, ContentInput } from '../types/content';
 
 // ============================================================================
 // CAMPAIGN FUNCTIONS
 // ============================================================================
 
-/**
- * Fetches campaign data from database
- * 
- * @param campaignId - Campaign UUID to fetch
- * @returns Campaign data
- * @throws Error if campaign not found or query fails
- */
-export async function getCampaignFromDB(
-  campaignId: string
-): Promise<ContentInput> {
+export async function getCampaignFromDB(campaignId: string): Promise<ContentInput> {
   console.log(`[Database] Fetching campaign: ${campaignId}`);
 
-  try {
-    const query = `
-      SELECT 
-        campaign_id,
-        industry,
-        total_days,
-        frequency_per_week,
-        festival_enabled,
-        logo_url,
-        font_style,
-        accent_color,
-        base_color,
-        services,
-        geography
-      FROM campaigns
-      WHERE campaign_id = $1
-    `;
+  const campaign = await prisma.socialCampaign.findUniqueOrThrow({
+    where: { id: campaignId },
+  });
 
-    const result = await pool.query(query, [campaignId]);
+  console.log('[Database] ✓ Campaign fetched successfully');
 
-    if (result.rows.length === 0) {
-      throw new Error(`Campaign not found: ${campaignId}`);
-    }
-
-    const row = result.rows[0];
-
-    console.log('[Database] ✓ Campaign fetched successfully');
-
-    return {
-      industry: row.industry,
-      total_days: row.total_days,
-      frequency_per_week: row.frequency_per_week,
-      festival_enabled: row.festival_enabled,
-      logo_url: row.logo_url,
-      font_style: row.font_style,
-      accent_color: row.accent_color,
-      base_color: row.base_color,
-      services: row.services,
-      geography: row.geography,
-    };
-  } catch (error) {
-    console.error('[Database] ✗ Query failed:', error);
-    throw new Error(
-      `Database query failed: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  return {
+    industry: campaign.industry || '',
+    total_days: campaign.totalDays,
+    frequency_per_week: campaign.frequencyPerWeek,
+    festival_enabled: campaign.festivalEnabled,
+    logo_url: campaign.brandLogo || '',
+    font_style: 'modern',
+    accent_color: campaign.accentColor || '#667eea',
+    base_color: campaign.brandColor || '#764ba2',
+    services: campaign.services,
+    geography: campaign.geography || 'India',
+  };
 }
 
 /**
- * Saves a new campaign to database
- * 
- * @param campaignId - Campaign UUID
- * @param input - Campaign input data
- * @returns The saved campaign ID
+ * No-op — campaign creation is done in server.ts via prisma.socialCampaign.create().
+ * Kept for backward compatibility with any direct calls.
  */
-export async function saveCampaignToDB(
-  campaignId: string,
-  input: ContentInput
-): Promise<string> {
-  console.log(`[Database] Saving campaign: ${campaignId}`);
-
-  const maxRetries = 3;
-  let lastError: Error | null = null;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const query = `
-        INSERT INTO campaigns (
-          campaign_id,
-          industry,
-          total_days,
-          frequency_per_week,
-          festival_enabled,
-          logo_url,
-          font_style,
-          accent_color,
-          base_color,
-          services,
-          geography
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-        )
-        ON CONFLICT (campaign_id) DO NOTHING
-        RETURNING campaign_id
-      `;
-
-      const values = [
-        campaignId,
-        input.industry,
-        input.total_days,
-        input.frequency_per_week,
-        input.festival_enabled,
-        input.logo_url,
-        input.font_style,
-        input.accent_color,
-        input.base_color,
-        input.services,
-        input.geography,
-      ];
-
-      const result = await pool.query(query, values);
-      
-      // If ON CONFLICT occurred, result.rows will be empty
-      if (result.rows.length === 0) {
-        console.log(`[Database] ⚠ Campaign ${campaignId} already exists, skipping insert`);
-      } else {
-        console.log(`[Database] ✓ Campaign saved: ${campaignId}`);
-      }
-      
-      return campaignId;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.error(`[Database] ✗ Save campaign attempt ${attempt}/${maxRetries} failed:`, lastError.message);
-      
-      if (attempt < maxRetries) {
-        // Wait before retrying (exponential backoff)
-        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        console.log(`[Database] Retrying in ${waitTime}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-    }
-  }
-
-  throw new Error(
-    `Failed to save campaign after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
-  );
+export async function saveCampaignToDB(campaignId: string, _input: any): Promise<string> {
+  return campaignId;
 }
 
 // ============================================================================
 // POST FUNCTIONS
 // ============================================================================
 
-/**
- * Saves generated posts to database
- * 
- * @param campaignId - Campaign UUID
- * @param posts - Array of generated posts
- * @returns Array of saved post IDs
- */
 export async function savePostsToDB(
   campaignId: string,
   posts: PostItem[]
 ): Promise<string[]> {
   console.log(`[Database] Saving ${posts.length} posts for campaign ${campaignId}...`);
 
-  const client = await pool.connect();
-  const savedIds: string[] = [];
+  const results = await prisma.$transaction(
+    posts.map((post) =>
+      prisma.socialPost.create({
+        data: {
+          campaignId,
+          scheduledDate: post.scheduledDate,
+          scheduledTime: '10:00',
+          timezone: 'Asia/Kolkata',
+          platform: 'instagram',
+          contentType: 'photo',
+          caption: post.caption,
+          hashtags: post.hashtags,
+          callToAction: post.callToAction,
+          imagePrompt: post.detailedImagePrompt,
+          imageUrl: post.imageUrl ?? undefined,
+          imageGenerated: !!post.imageUrl,
+          imageModel: post.metadata.imageModel ?? undefined,
+          contentPillar: post.metadata.contentPillar ?? undefined,
+          topic: post.metadata.topic,
+          isFestival: !!post.metadata.festival,
+          festivalName: post.metadata.festival ?? undefined,
+          status: 'DRAFT',
+        },
+      })
+    )
+  );
 
-  try {
-    await client.query('BEGIN');
-
-    for (const post of posts) {
-      const query = `
-        INSERT INTO posts (
-          campaign_id,
-          scheduled_date,
-          caption,
-          hashtags,
-          call_to_action,
-          image_url,
-          image_prompt,
-          detailed_image_prompt,
-          image_model,
-          content_pillar,
-          topic,
-          content_type,
-          is_festival,
-          festival_name,
-          status
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
-        )
-        RETURNING post_id
-      `;
-
-      const values = [
-        campaignId,
-        post.scheduledDate,
-        post.caption,
-        post.hashtags,
-        post.callToAction || null,
-        post.imageUrl, // null until image generated on-demand
-        null, // image_prompt - short version (not used in new workflow)
-        post.detailedImagePrompt, // comprehensive prompt
-        post.metadata.imageModel || null, // null until image generated
-        post.metadata.contentPillar || null,
-        post.metadata.topic, // now available in metadata
-        'image',
-        post.metadata.festival ? true : false,
-        post.metadata.festival || null,
-        'draft',
-      ];
-
-      const result = await client.query(query, values);
-      savedIds.push(result.rows[0].post_id);
-    }
-
-    await client.query('COMMIT');
-    console.log(`[Database] ✓ Saved ${savedIds.length} posts successfully`);
-
-    return savedIds;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('[Database] ✗ Save posts failed:', error);
-    throw new Error(
-      `Failed to save posts: ${error instanceof Error ? error.message : String(error)}`
-    );
-  } finally {
-    client.release();
-  }
+  const ids = results.map((p) => p.id);
+  console.log(`[Database] ✓ Saved ${ids.length} posts successfully`);
+  return ids;
 }
 
-/**
- * Fetches all posts for a campaign
- * 
- * @param campaignId - Campaign UUID
- * @returns Array of posts
- */
-export async function getPostsByCampaign(
-  campaignId: string
-): Promise<any[]> {
+export async function getPostsByCampaign(campaignId: string): Promise<any[]> {
   console.log(`[Database] Fetching posts for campaign: ${campaignId}`);
 
-  try {
-    const query = `
-      SELECT 
-        post_id,
-        campaign_id,
-        scheduled_date,
-        scheduled_time,
-        caption,
-        hashtags,
-        call_to_action,
-        image_url,
-        image_prompt,
-        detailed_image_prompt,
-        image_model,
-        content_pillar,
-        topic,
-        content_type,
-        is_festival,
-        festival_name,
-        status,
-        created_at,
-        updated_at
-      FROM posts
-      WHERE campaign_id = $1
-      ORDER BY scheduled_date ASC
-    `;
+  const posts = await prisma.socialPost.findMany({
+    where: { campaignId },
+    orderBy: { scheduledDate: 'asc' },
+  });
 
-    const result = await pool.query(query, [campaignId]);
-
-    console.log(`[Database] ✓ Found ${result.rows.length} posts`);
-
-    return result.rows;
-  } catch (error) {
-    console.error('[Database] ✗ Query failed:', error);
-    throw new Error(
-      `Failed to fetch posts: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  console.log(`[Database] ✓ Found ${posts.length} posts`);
+  return posts;
 }
 
-/**
- * Fetches posts for a specific date
- * 
- * @param campaignId - Campaign UUID
- * @param date - Date in YYYY-MM-DD format
- * @returns Array of posts for that date
- */
-export async function getPostsByDate(
-  campaignId: string,
-  date: string
-): Promise<any[]> {
+export async function getPostsByDate(campaignId: string, date: string): Promise<any[]> {
   console.log(`[Database] Fetching posts for ${date} in campaign ${campaignId}`);
 
-  try {
-    const query = `
-      SELECT 
-        post_id,
-        campaign_id,
-        scheduled_date,
-        scheduled_time,
-        caption,
-        hashtags,
-        call_to_action,
-        image_url,
-        image_prompt,
-        image_model,
-        content_pillar,
-        topic,
-        content_type,
-        is_festival,
-        festival_name,
-        status,
-        created_at,
-        updated_at
-      FROM posts
-      WHERE campaign_id = $1 AND scheduled_date = $2
-      ORDER BY created_at ASC
-    `;
+  const start = new Date(date);
+  const end = new Date(date);
+  end.setDate(end.getDate() + 1);
 
-    const result = await pool.query(query, [campaignId, date]);
+  const posts = await prisma.socialPost.findMany({
+    where: { campaignId, scheduledDate: { gte: start, lt: end } },
+    orderBy: { scheduledDate: 'asc' },
+  });
 
-    console.log(`[Database] ✓ Found ${result.rows.length} posts for ${date}`);
-
-    return result.rows;
-  } catch (error) {
-    console.error('[Database] ✗ Query failed:', error);
-    throw new Error(
-      `Failed to fetch posts by date: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  console.log(`[Database] ✓ Found ${posts.length} posts for ${date}`);
+  return posts;
 }
 
-/**
- * Gets a single post by ID
- * 
- * @param postId - Post UUID
- * @returns Post data or null if not found
- */
 export async function getPostById(postId: string): Promise<any | null> {
   console.log(`[Database] Fetching post: ${postId}`);
 
-  try {
-    const query = `
-      SELECT * FROM posts
-      WHERE post_id = $1
-    `;
+  const post = await prisma.socialPost.findUnique({ where: { id: postId } });
 
-    const result = await pool.query(query, [postId]);
-
-    if (result.rows.length === 0) {
-      console.log(`[Database] Post not found: ${postId}`);
-      return null;
-    }
-
-    console.log(`[Database] ✓ Post fetched successfully`);
-    return result.rows[0];
-  } catch (error) {
-    console.error('[Database] ✗ Fetch failed:', error);
-    throw new Error(
-      `Failed to fetch post: ${error instanceof Error ? error.message : String(error)}`
-    );
+  if (!post) {
+    console.log(`[Database] Post not found: ${postId}`);
+    return null;
   }
+
+  console.log(`[Database] ✓ Post fetched successfully`);
+  return post;
 }
 
-/**
- * Updates a single post
- * 
- * @param postId - Post UUID
- * @param updates - Fields to update
- * @returns Updated post data
- */
 export async function updatePost(
   postId: string,
-  updates: {
-    caption?: string;
-    hashtags?: string[];
-    image_url?: string;
-    image_prompt?: string;
-    status?: string;
-  }
+  updates: Record<string, any>
 ): Promise<any> {
   console.log(`[Database] Updating post: ${postId}`);
 
-  try {
-    // Build dynamic UPDATE query
-    const fields: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
+  // Map snake_case and camelCase keys to Prisma field names
+  const data: any = {};
 
-    if (updates.caption !== undefined) {
-      fields.push(`caption = $${paramCount++}`);
-      values.push(updates.caption);
-    }
-    if (updates.hashtags !== undefined) {
-      fields.push(`hashtags = $${paramCount++}`);
-      values.push(updates.hashtags);
-    }
-    if (updates.image_url !== undefined) {
-      fields.push(`image_url = $${paramCount++}`);
-      values.push(updates.image_url);
-    }
-    if (updates.image_prompt !== undefined) {
-      fields.push(`image_prompt = $${paramCount++}`);
-      values.push(updates.image_prompt);
-    }
-    if (updates.status !== undefined) {
-      fields.push(`status = $${paramCount++}`);
-      values.push(updates.status);
-    }
-
-    if (fields.length === 0) {
-      throw new Error('No fields to update');
-    }
-
-    values.push(postId);
-
-    const query = `
-      UPDATE posts
-      SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE post_id = $${paramCount}
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, values);
-
-    if (result.rows.length === 0) {
-      throw new Error(`Post not found: ${postId}`);
-    }
-
-    console.log(`[Database] ✓ Post updated successfully`);
-
-    return result.rows[0];
-  } catch (error) {
-    console.error('[Database] ✗ Update failed:', error);
-    throw new Error(
-      `Failed to update post: ${error instanceof Error ? error.message : String(error)}`
-    );
+  if (updates.caption !== undefined) data.caption = updates.caption;
+  if (updates.hashtags !== undefined) data.hashtags = updates.hashtags;
+  if (updates.image_url !== undefined) data.imageUrl = updates.image_url;
+  if (updates.imageUrl !== undefined) data.imageUrl = updates.imageUrl;
+  if (updates.image_prompt !== undefined) data.imagePrompt = updates.image_prompt;
+  if (updates.imagePrompt !== undefined) data.imagePrompt = updates.imagePrompt;
+  if (updates.image_model !== undefined) data.imageModel = updates.image_model;
+  if (updates.imageModel !== undefined) data.imageModel = updates.imageModel;
+  if (updates.call_to_action !== undefined) data.callToAction = updates.call_to_action;
+  if (updates.callToAction !== undefined) data.callToAction = updates.callToAction;
+  if (updates.status !== undefined) {
+    data.status = (updates.status as string).toUpperCase();
   }
+  if (updates.approvedAt !== undefined) data.approvedAt = updates.approvedAt;
+  if (updates.approved_at !== undefined) data.approvedAt = updates.approved_at;
+  if (updates.publishedAt !== undefined) data.publishedAt = updates.publishedAt;
+  if (updates.published_at !== undefined) data.publishedAt = updates.published_at;
+
+  if (Object.keys(data).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  const updated = await prisma.socialPost.update({ where: { id: postId }, data });
+
+  console.log(`[Database] ✓ Post updated successfully`);
+  return updated;
 }
 
-/**
- * Deletes a post
- * 
- * @param postId - Post UUID
- */
 export async function deletePost(postId: string): Promise<void> {
   console.log(`[Database] Deleting post: ${postId}`);
 
-  try {
-    const query = `
-      DELETE FROM posts
-      WHERE post_id = $1
-    `;
+  await prisma.socialPost.delete({ where: { id: postId } });
 
-    const result = await pool.query(query, [postId]);
-
-    if (result.rowCount === 0) {
-      throw new Error(`Post not found: ${postId}`);
-    }
-
-    console.log(`[Database] ✓ Post deleted successfully`);
-  } catch (error) {
-    console.error('[Database] ✗ Delete failed:', error);
-    throw new Error(
-      `Failed to delete post: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  console.log(`[Database] ✓ Post deleted successfully`);
 }
 
-/**
- * Closes database connection pool
- * WHY: Graceful shutdown
- */
-export async function closeDatabase(): Promise<void> {
-  await pool.end();
-  console.log('[Database] Connection pool closed');
-}
-
-// ============================================================================
-// STRATEGY FUNCTIONS
-// ============================================================================
-
-/**
- * Saves strategy to database
- * 
- * @param campaignId - Campaign UUID
- * @param strategy - Generated strategy
- * @returns Strategy ID
- */
-export async function saveStrategyToDB(
-  campaignId: string,
-  strategy: Strategy
-): Promise<string> {
-  console.log(`[Database] Saving strategy for campaign: ${campaignId}`);
-
-  try {
-    const query = `
-      INSERT INTO strategies (
-        campaign_id,
-        content_pillars,
-        tone,
-        cta_style,
-        content_mix_education,
-        content_mix_trust,
-        content_mix_promotion,
-        campaign_phases,
-        model_used
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING strategy_id
-    `;
-
-    const values = [
-      campaignId,
-      strategy.content_pillars,
-      strategy.tone,
-      strategy.cta_style,
-      strategy.content_mix.education,
-      strategy.content_mix.trust,
-      strategy.content_mix.promotion,
-      strategy.campaign_phases ? JSON.stringify(strategy.campaign_phases) : null,
-      process.env.LLM_MODEL || 'gpt-4-turbo-preview',
-    ];
-
-    const result = await pool.query(query, values);
-    const strategyId = result.rows[0].strategy_id;
-
-    console.log(`[Database] ✓ Strategy saved: ${strategyId}`);
-    return strategyId;
-  } catch (error) {
-    console.error('[Database] ✗ Save strategy failed:', error);
-    throw new Error(
-      `Failed to save strategy: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-/**
- * Fetches strategy from database
- * 
- * @param strategyId - Strategy UUID
- * @returns Strategy object
- */
-export async function getStrategyFromDB(strategyId: string): Promise<Strategy> {
-  console.log(`[Database] Fetching strategy: ${strategyId}`);
-
-  try {
-    const query = `
-      SELECT 
-        strategy_id,
-        content_pillars,
-        tone,
-        cta_style,
-        content_mix_education,
-        content_mix_trust,
-        content_mix_promotion,
-        campaign_phases
-      FROM strategies
-      WHERE strategy_id = $1
-    `;
-
-    const result = await pool.query(query, [strategyId]);
-
-    if (result.rows.length === 0) {
-      throw new Error(`Strategy not found: ${strategyId}`);
-    }
-
-    const row = result.rows[0];
-
-    const strategy: Strategy = {
-      strategy_id: row.strategy_id,
-      content_pillars: row.content_pillars,
-      tone: row.tone,
-      cta_style: row.cta_style,
-      content_mix: {
-        education: row.content_mix_education,
-        trust: row.content_mix_trust,
-        promotion: row.content_mix_promotion,
-      },
-      campaign_phases: row.campaign_phases ? JSON.parse(row.campaign_phases) : undefined,
-    };
-
-    console.log(`[Database] ✓ Strategy found`);
-    return strategy;
-  } catch (error) {
-    console.error('[Database] ✗ Fetch strategy failed:', error);
-    throw new Error(
-      `Failed to fetch strategy: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-/**
- * Gets strategy for a campaign
- * 
- * @param campaignId - Campaign UUID
- * @returns Strategy object or null if not found
- */
-export async function getStrategyByCampaignId(campaignId: string): Promise<Strategy | null> {
-  try {
-    const query = `
-      SELECT 
-        strategy_id,
-        content_pillars,
-        tone,
-        cta_style,
-        content_mix_education,
-        content_mix_trust,
-        content_mix_promotion,
-        campaign_phases
-      FROM strategies
-      WHERE campaign_id = $1
-    `;
-
-    const result = await pool.query(query, [campaignId]);
-
-    if (result.rows.length === 0) {
-      return null;
-    }
-
-    const row = result.rows[0];
-
-    return {
-      strategy_id: row.strategy_id,
-      content_pillars: row.content_pillars,
-      tone: row.tone,
-      cta_style: row.cta_style,
-      content_mix: {
-        education: row.content_mix_education,
-        trust: row.content_mix_trust,
-        promotion: row.content_mix_promotion,
-      },
-      campaign_phases: row.campaign_phases ? JSON.parse(row.campaign_phases) : undefined,
-    };
-  } catch (error) {
-    console.error('[Database] ✗ Fetch strategy by campaign failed:', error);
-    return null;
-  }
-}
-
-// ============================================================================
-// CALENDAR ENTRY FUNCTIONS
-// ============================================================================
-
-/**
- * Saves calendar entries to database
- * 
- * @param campaignId - Campaign UUID
- * @param strategyId - Strategy UUID
- * @param calendar - Array of calendar items
- * @returns Array of entry IDs
- */
-export async function saveCalendarToDB(
-  campaignId: string,
-  strategyId: string,
-  calendar: CalendarItem[]
-): Promise<string[]> {
-  console.log(`[Database] Saving ${calendar.length} calendar entries for campaign: ${campaignId}`);
-
-  const client = await pool.connect();
-  const entryIds: string[] = [];
-  const duplicateTopics: string[] = [];
-
-  try {
-    await client.query('BEGIN');
-
-    for (let i = 0; i < calendar.length; i++) {
-      const entry = calendar[i];
-      
-      // Check for duplicate topic
-      const isDuplicate = await isTopicDuplicate(campaignId, entry.topic);
-      if (isDuplicate) {
-        duplicateTopics.push(entry.topic);
-        console.warn(`[Database] ⚠ Duplicate topic detected (Day ${i + 1}): "${entry.topic}"`);
-      }
-      
-      const query = `
-        INSERT INTO calendar_entries (
-          campaign_id,
-          strategy_id,
-          scheduled_date,
-          day_number,
-          pillar,
-          topic,
-          content_type,
-          is_festival,
-          festival_name,
-          campaign_phase,
-          status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        RETURNING entry_id
-      `;
-
-      const values = [
-        campaignId,
-        strategyId,
-        entry.date,
-        i + 1, // day_number (1-indexed)
-        entry.pillar,
-        entry.topic,
-        entry.content_type || 'image',
-        entry.is_festival || false,
-        entry.festival_name || null,
-        null, // campaign_phase - will be populated later
-        'planned',
-      ];
-
-      const result = await client.query(query, values);
-      entryIds.push(result.rows[0].entry_id);
-    }
-
-    await client.query('COMMIT');
-    console.log(`[Database] ✓ Saved ${entryIds.length} calendar entries`);
-    
-    if (duplicateTopics.length > 0) {
-      console.warn(`[Database] ⚠ ${duplicateTopics.length} duplicate topics saved (consider regenerating)`);
-    }
-
-    return entryIds;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('[Database] ✗ Save calendar failed:', error);
-    throw new Error(
-      `Failed to save calendar: ${error instanceof Error ? error.message : String(error)}`
-    );
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Gets calendar entry by ID
- * 
- * @param entryId - Calendar entry UUID
- * @returns Calendar entry data
- */
-export async function getCalendarEntryById(entryId: string): Promise<any> {
-  console.log(`[Database] Fetching calendar entry: ${entryId}`);
-
-  try {
-    const query = `
-      SELECT 
-        entry_id,
-        campaign_id,
-        strategy_id,
-        scheduled_date,
-        day_number,
-        pillar,
-        topic,
-        content_type,
-        is_festival,
-        festival_name,
-        campaign_phase,
-        status
-      FROM calendar_entries
-      WHERE entry_id = $1
-    `;
-
-    const result = await pool.query(query, [entryId]);
-
-    if (result.rows.length === 0) {
-      throw new Error(`Calendar entry not found: ${entryId}`);
-    }
-
-    console.log(`[Database] ✓ Calendar entry found`);
-    return result.rows[0];
-  } catch (error) {
-    console.error('[Database] ✗ Fetch calendar entry failed:', error);
-    throw new Error(
-      `Failed to fetch calendar entry: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-/**
- * Gets all calendar entries for a campaign
- * 
- * @param campaignId - Campaign UUID
- * @returns Array of calendar entries
- */
-export async function getCalendarByCampaignId(campaignId: string): Promise<any[]> {
-  console.log(`[Database] Fetching calendar for campaign: ${campaignId}`);
-
-  try {
-    const query = `
-      SELECT 
-        entry_id,
-        campaign_id,
-        strategy_id,
-        scheduled_date,
-        day_number,
-        pillar,
-        topic,
-        content_type,
-        is_festival,
-        festival_name,
-        campaign_phase,
-        status
-      FROM calendar_entries
-      WHERE campaign_id = $1
-      ORDER BY scheduled_date ASC
-    `;
-
-    const result = await pool.query(query, [campaignId]);
-
-    console.log(`[Database] ✓ Found ${result.rows.length} calendar entries`);
-    return result.rows;
-  } catch (error) {
-    console.error('[Database] ✗ Fetch calendar failed:', error);
-    throw new Error(
-      `Failed to fetch calendar: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-// ============================================================================
-// DUPLICATE DETECTION FUNCTIONS
-// ============================================================================
-
-/**
- * Gets all existing topics for a campaign
- * 
- * @param campaignId - Campaign UUID
- * @returns Array of topic strings
- */
-export async function getExistingTopicsForCampaign(campaignId: string): Promise<string[]> {
-  try {
-    const query = `
-      SELECT topic
-      FROM calendar_entries
-      WHERE campaign_id = $1
-      ORDER BY day_number ASC
-    `;
-
-    const result = await pool.query(query, [campaignId]);
-    return result.rows.map(row => row.topic);
-  } catch (error) {
-    console.error('[Database] ✗ Fetch existing topics failed:', error);
-    return [];
-  }
-}
-
-/**
- * Checks if a topic is duplicate for a campaign
- * 
- * @param campaignId - Campaign UUID
- * @param topic - Topic to check
- * @returns True if duplicate exists
- */
-export async function isTopicDuplicate(
-  campaignId: string,
-  topic: string
-): Promise<boolean> {
-  try {
-    const query = `
-      SELECT COUNT(*) as count
-      FROM calendar_entries
-      WHERE campaign_id = $1 AND LOWER(topic) = LOWER($2)
-    `;
-
-    const result = await pool.query(query, [campaignId, topic]);
-    return parseInt(result.rows[0].count) > 0;
-  } catch (error) {
-    console.error('[Database] ✗ Duplicate check failed:', error);
-    return false;
-  }
-}
-
-/**
- * Update post with generated image URL
- * 
- * @param postId - Post UUID
- * @param imageUrl - Public URL to generated image
- * @param imageModel - Model used for generation
- */
 export async function updatePostImage(
   postId: string,
   imageUrl: string,
@@ -908,28 +179,150 @@ export async function updatePostImage(
 ): Promise<void> {
   console.log(`[Database] Updating post ${postId} with generated image`);
 
-  try {
-    const query = `
-      UPDATE posts
-      SET 
-        image_url = $1,
-        image_model = $2,
-        updated_at = NOW()
-      WHERE post_id = $3
-    `;
+  await prisma.socialPost.update({
+    where: { id: postId },
+    data: { imageUrl, imageModel, imageGenerated: true },
+  });
 
-    const result = await pool.query(query, [imageUrl, imageModel, postId]);
-
-    if (result.rowCount === 0) {
-      throw new Error(`Post not found: ${postId}`);
-    }
-
-    console.log(`[Database] ✓ Post image updated successfully`);
-  } catch (error) {
-    console.error('[Database] ✗ Update failed:', error);
-    throw new Error(
-      `Failed to update post image: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
+  console.log(`[Database] ✓ Post image updated successfully`);
 }
 
+// ============================================================================
+// STRATEGY FUNCTIONS
+// ============================================================================
+
+export async function saveStrategyToDB(
+  campaignId: string,
+  strategy: Strategy
+): Promise<string> {
+  console.log(`[Database] Saving strategy for campaign: ${campaignId}`);
+
+  const saved = await prisma.socialStrategy.create({
+    data: {
+      campaignId,
+      contentPillars: strategy.content_pillars,
+      tone: strategy.tone,
+      ctaStyle: strategy.cta_style,
+      contentMix: strategy.content_mix as any,
+      campaignPhases: strategy.campaign_phases
+        ? (strategy.campaign_phases as any)
+        : undefined,
+      modelUsed: process.env.LLM_MODEL || 'gpt-4o-mini',
+    },
+  });
+
+  console.log(`[Database] ✓ Strategy saved: ${saved.id}`);
+  return saved.id;
+}
+
+export async function getStrategyFromDB(strategyId: string): Promise<Strategy> {
+  console.log(`[Database] Fetching strategy: ${strategyId}`);
+
+  const row = await prisma.socialStrategy.findUniqueOrThrow({ where: { id: strategyId } });
+  const mix = row.contentMix as any;
+
+  console.log(`[Database] ✓ Strategy found`);
+  return {
+    strategy_id: row.id,
+    content_pillars: row.contentPillars,
+    tone: row.tone || 'warm and engaging',
+    cta_style: row.ctaStyle || 'inviting',
+    content_mix: {
+      education: mix?.education ?? 30,
+      trust: mix?.trust ?? 50,
+      promotion: mix?.promotion ?? 20,
+    },
+    campaign_phases: row.campaignPhases as any,
+  };
+}
+
+export async function getStrategyByCampaignId(campaignId: string): Promise<Strategy | null> {
+  const row = await prisma.socialStrategy.findUnique({ where: { campaignId } });
+  if (!row) return null;
+
+  const mix = row.contentMix as any;
+  return {
+    strategy_id: row.id,
+    content_pillars: row.contentPillars,
+    tone: row.tone || 'warm and engaging',
+    cta_style: row.ctaStyle || 'inviting',
+    content_mix: {
+      education: mix?.education ?? 30,
+      trust: mix?.trust ?? 50,
+      promotion: mix?.promotion ?? 20,
+    },
+    campaign_phases: row.campaignPhases as any,
+  };
+}
+
+// ============================================================================
+// CALENDAR FUNCTIONS
+// Calendar entries are not stored separately — schedule lives on SocialPost.
+// These are kept so the pipeline import doesn't break.
+// ============================================================================
+
+export async function saveCalendarToDB(
+  _campaignId: string,
+  _strategyId: string,
+  calendar: CalendarItem[]
+): Promise<string[]> {
+  // Calendar is ephemeral — SocialPost is the source of truth for scheduling.
+  return calendar.map((_, i) => `cal-${i}`);
+}
+
+export async function getCalendarEntryById(_entryId: string): Promise<any> {
+  throw new Error('Calendar entries are no longer stored separately');
+}
+
+export async function getCalendarByCampaignId(campaignId: string): Promise<any[]> {
+  const posts = await prisma.socialPost.findMany({
+    where: { campaignId },
+    orderBy: { scheduledDate: 'asc' },
+    select: {
+      id: true,
+      campaignId: true,
+      scheduledDate: true,
+      contentPillar: true,
+      topic: true,
+      contentType: true,
+      isFestival: true,
+      festivalName: true,
+    },
+  });
+
+  return posts.map((p, i) => ({
+    entry_id: p.id,
+    campaign_id: p.campaignId,
+    scheduled_date: p.scheduledDate,
+    day_number: i + 1,
+    pillar: p.contentPillar,
+    topic: p.topic,
+    content_type: p.contentType,
+    is_festival: p.isFestival,
+    festival_name: p.festivalName,
+    status: 'planned',
+  }));
+}
+
+export async function getExistingTopicsForCampaign(campaignId: string): Promise<string[]> {
+  const posts = await prisma.socialPost.findMany({
+    where: { campaignId },
+    select: { topic: true },
+  });
+  return posts.map((p) => p.topic).filter(Boolean) as string[];
+}
+
+export async function isTopicDuplicate(
+  campaignId: string,
+  topic: string
+): Promise<boolean> {
+  const count = await prisma.socialPost.count({
+    where: { campaignId, topic: { equals: topic, mode: 'insensitive' } },
+  });
+  return count > 0;
+}
+
+export async function closeDatabase(): Promise<void> {
+  await prisma.$disconnect();
+  console.log('[Database] Prisma client disconnected');
+}

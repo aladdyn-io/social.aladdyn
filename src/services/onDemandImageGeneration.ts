@@ -1,94 +1,63 @@
 /**
  * On-Demand Image Generation Service
- * 
- * Generates image for a specific post using its detailed prompt.
- * This is called when user requests image generation for a specific date/post.
+ *
+ * Generates an image for a specific post using its stored detailed prompt.
+ * Called when the user requests image generation for a specific post.
  */
 
-import { generateImage, ImageGenerationResult } from './imageGenerator';
+import { generateImageFromPrompt } from './imageGenerator';
 import { uploadImageToStorage } from './objectStorage';
 import { getPostById, updatePostImage } from '../db/database';
 
 /**
  * Generate image for a specific post on-demand
- * 
+ *
  * Workflow:
- * 1. Fetch post from database (get detailed_image_prompt)
- * 2. Generate image using the prompt
- * 3. Upload image to storage
- * 4. Update database with image URL
- * 
- * @param postId - UUID of the post to generate image for
+ * 1. Fetch post (get stored imagePrompt / detailed prompt)
+ * 2. Generate image using that prompt directly
+ * 3. Upload to MinIO
+ * 4. Update DB with image URL
+ *
+ * @param postId - UUID of the post
  * @returns Public URL of generated image
  */
 export async function generatePostImage(postId: string): Promise<string> {
   console.log(`[OnDemandImage] Generating image for post: ${postId}`);
 
   try {
-    // ========================================================================
-    // STEP 1: FETCH POST DATA
-    // ========================================================================
-    
+    // STEP 1: Fetch post
     const post = await getPostById(postId);
 
-    if (!post.detailed_image_prompt) {
+    if (!post) {
+      throw new Error(`Post not found: ${postId}`);
+    }
+
+    if (!post.imagePrompt) {
       throw new Error('Post does not have a detailed image prompt');
     }
 
-    if (post.image_url) {
-      console.log(`[OnDemandImage] ⚠️  Post already has an image: ${post.image_url}`);
-      return post.image_url;
+    if (post.imageUrl) {
+      console.log(`[OnDemandImage] Post already has image: ${post.imageUrl}`);
+      return post.imageUrl;
     }
 
-    console.log(`[OnDemandImage] ✓ Post fetched, prompt length: ${post.detailed_image_prompt.length} chars`);
+    console.log(`[OnDemandImage] Prompt length: ${post.imagePrompt.length} chars`);
 
-    // ========================================================================
-    // STEP 2: GENERATE IMAGE
-    // ========================================================================
-    
-    console.log(`[OnDemandImage] Generating image from prompt...`);
-    
-    // Build calendar item from post data
-    const calendarItem = {
-      date: new Date(post.scheduled_date).toISOString().split('T')[0],
-      pillar: post.content_pillar || 'General',
-      topic: post.topic || '',
-      content_type: 'image' as const,
-      is_festival: post.is_festival || false,
-      festival_name: post.festival_name || undefined,
-    };
-    
-    // Build normalized input
-    const normalizedInput: any = {
-      industry: 'Generic',
-      services: [],
-      geography: 'Global',
-      accent_color: '#667eea',
-      base_color: '#764ba2',
-    };
-
-    const imageResult: ImageGenerationResult = await generateImage(calendarItem, normalizedInput);
+    // STEP 2: Generate image from the stored detailed prompt
+    const imageResult = await generateImageFromPrompt(post.imagePrompt);
     console.log(`[OnDemandImage] ✓ Image generated (${imageResult.metadata.model})`);
 
-    // ========================================================================
-    // STEP 3: UPLOAD TO STORAGE
-    // ========================================================================
-    
+    // STEP 3: Upload to MinIO
     const imageUrl = await uploadImageToStorage(imageResult, `posts/${postId}/`);
-    console.log(`[OnDemandImage] ✓ Image uploaded: ${imageUrl}`);
+    console.log(`[OnDemandImage] ✓ Uploaded: ${imageUrl}`);
 
-    // ========================================================================
-    // STEP 4: UPDATE DATABASE
-    // ========================================================================
-    
+    // STEP 4: Update DB
     await updatePostImage(postId, imageUrl, imageResult.metadata.model);
-    console.log(`[OnDemandImage] ✓ Database updated with image URL`);
+    console.log(`[OnDemandImage] ✓ DB updated`);
 
-    console.log(`[OnDemandImage] ✅ Image generation complete for post ${postId}`);
     return imageUrl;
-
   } catch (error) {
-    console.error(`[OnDemandImage] ✗ Failed to generate image for post ${postId}:`, error);
+    console.error(`[OnDemandImage] ✗ Failed for post ${postId}:`, error);
     throw new Error(
       `Image generation failed: ${error instanceof Error ? error.message : String(error)}`
     );
@@ -97,9 +66,6 @@ export async function generatePostImage(postId: string): Promise<string> {
 
 /**
  * Batch generate images for multiple posts
- * 
- * @param postIds - Array of post UUIDs
- * @returns Map of postId -> imageUrl (or error message)
  */
 export async function generatePostImages(
   postIds: string[]
@@ -109,19 +75,19 @@ export async function generatePostImages(
   const results = new Map<string, { success: boolean; imageUrl?: string; error?: string }>();
 
   for (const [index, postId] of postIds.entries()) {
-    console.log(`[OnDemandImage] [${index + 1}/${postIds.length}] Processing post ${postId}...`);
+    console.log(`[OnDemandImage] [${index + 1}/${postIds.length}] Processing ${postId}...`);
 
     try {
       const imageUrl = await generatePostImage(postId);
       results.set(postId, { success: true, imageUrl });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[OnDemandImage] Failed for post ${postId}:`, errorMessage);
-      results.set(postId, { success: false, error: errorMessage });
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[OnDemandImage] Failed for post ${postId}:`, msg);
+      results.set(postId, { success: false, error: msg });
     }
   }
 
-  const successCount = Array.from(results.values()).filter(r => r.success).length;
+  const successCount = Array.from(results.values()).filter((r) => r.success).length;
   console.log(`[OnDemandImage] ✓ Batch complete: ${successCount}/${postIds.length} succeeded`);
 
   return results;

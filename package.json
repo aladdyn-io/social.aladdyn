@@ -1,30 +1,39 @@
 {
-  "name": "social-scene-backend",
+  "name": "social.aladdyn",
   "version": "1.0.0",
-  "description": "AI-powered content generation backend",
-  "main": "dist/index.js",
+  "description": "AI-powered content strategy, calendar and media generation service",
+  "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts",
-    "dev:cli": "ts-node src/index.ts",
+    "dev": "tsx watch src/server.ts",
     "migrate": "ts-node src/db/migrate.ts",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "queue:ui": "tsx src/jobs/bullBoard.ts",
     "test": "jest"
   },
   "keywords": [
     "content",
     "ai",
-    "backend"
+    "social-media",
+    "aladdyn"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.496.0",
-    "@google/generative-ai": "^0.24.1",
+    "@bull-board/api": "^6.20.6",
+    "@bull-board/express": "^6.20.6",
+    "@prisma/client": "^5.10.2",
     "axios": "^1.13.3",
+    "bullmq": "^5.4.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^4.22.1",
+    "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.2",
     "minio": "^8.0.6",
     "openai": "^4.24.1",
     "pg": "^8.11.3",
@@ -36,11 +45,15 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.11.5",
     "@types/pg": "^8.10.9",
     "@types/sharp": "^0.31.1",
     "@types/uuid": "^9.0.8",
+    "prisma": "^5.10.2",
     "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.8",
+    "tsx": "^4.7.1",
     "typescript": "^5.3.3"
   }
 }

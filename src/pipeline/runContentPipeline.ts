@@ -1,8 +1,8 @@
 /**
  * Main Content Generation Pipeline
- * 
- * Orchestrates the entire content generation flow from input to output.
- * This is the single entry point for the content generation system.
+ *
+ * Orchestrates: normalize → genie context → strategy → calendar → posts → save
+ * Entry point: called from server.ts routes.
  */
 
 import { ContentInput, ContentOutput, FestivalEvent } from '../types/content';
@@ -10,31 +10,13 @@ import { normalizeInput } from '../services/normalizeInput';
 import { generateStrategy } from '../services/generateStrategy';
 import { generateCalendar } from '../services/generateCalendar';
 import { generatePosts } from '../services/generatePosts';
-import { 
-  savePostsToDB, 
-  saveStrategyToDB, 
-  saveCalendarToDB 
+import { fetchGenieContext } from '../services/genieContext';
+import {
+  savePostsToDB,
+  saveStrategyToDB,
+  saveCalendarToDB,
 } from '../db/database';
 
-/**
- * Runs the complete content generation pipeline
- * 
- * Flow:
- * 1. Normalize and validate input
- * 2. Generate content strategy (AI)
- * 3. Build content calendar (rule-based)
- * 4. Generate posts with captions and images (AI)
- * 5. Save posts to database (if campaignId provided)
- * 6. Return complete output
- * 
- * @param input - Raw content input from database
- * @param campaignId - Optional campaign UUID to save posts
- * @returns Complete content output with strategy, calendar, and posts
- * @throws Error if any step fails critically
- */
-/**
- * Maps geography string to ISO country code
- */
 function getCountryCode(geography: string): string {
   const mapping: Record<string, string> = {
     india: 'IN',
@@ -46,130 +28,115 @@ function getCountryCode(geography: string): string {
     australia: 'AU',
     singapore: 'SG',
     uae: 'AE',
-    // Add more mappings as needed
   };
-  
-  return mapping[geography.toLowerCase()] || 'IN'; // Default to India
+  return mapping[geography.toLowerCase()] || 'IN';
 }
 
 export async function runContentPipeline(
   input: ContentInput,
-  campaignId?: string
+  campaignId?: string,
+  funnelId?: string
 ): Promise<ContentOutput> {
   try {
-    // ========================================================================
-    // STEP 1: NORMALIZE INPUT
-    // ========================================================================
-    // Validates data, sanitizes fields, computes derived values
-    // Rule-based, synchronous, fails fast on invalid input
-    
-    const normalizedInput = normalizeInput(input);
+    // ── Step 1: Fetch Genie Context (website knowledge + business profile) ───
+    let websiteContext: string | undefined;
+    let enrichedInput = input;
+    if (funnelId) {
+      const genieCtx = await fetchGenieContext(funnelId);
+      if (genieCtx) {
+        if (genieCtx.websiteSummary) {
+          websiteContext = genieCtx.websiteSummary;
+          console.log(`[Pipeline] Got website context (${websiteContext.length} chars) from genie`);
+        }
+        // Auto-populate missing input fields from scraped data
+        enrichedInput = {
+          ...input,
+          industry: input.industry?.trim() || genieCtx.industry || 'General Business',
+          geography: input.geography?.trim() || genieCtx.geography || 'India',
+          services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
+        };
+        console.log(`[Pipeline] Enriched input — industry: ${enrichedInput.industry}, geography: ${enrichedInput.geography}`);
+      } else {
+        console.log('[Pipeline] No genie context available — using input data only');
+        enrichedInput = {
+          ...input,
+          industry: input.industry?.trim() || 'General Business',
+          geography: input.geography?.trim() || 'India',
+          services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
+        };
+      }
+    } else {
+      // No funnelId — still apply fallbacks so normalizeInput doesn't throw
+      enrichedInput = {
+        ...input,
+        industry: input.industry?.trim() || 'General Business',
+        geography: input.geography?.trim() || 'India',
+        services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
+      };
+    }
 
-    // ========================================================================
-    // STEP 2: GENERATE CONTENT STRATEGY
-    // ========================================================================
-    // Uses AI (LLM) to create content strategy based on business context
-    // Async, can fail, should retry on transient errors
-    
-    const strategy = await generateStrategy(normalizedInput);
+    // ── Step 2: Normalize ────────────────────────────────────────────────────
+    const normalizedInput = normalizeInput(enrichedInput);
 
-    // Save strategy to database
+    // ── Step 3: Generate Strategy ─────────────────────────────────────────────
+    const strategy = await generateStrategy(normalizedInput, websiteContext);
+
     let strategyId: string | undefined;
     if (campaignId) {
       try {
         strategyId = await saveStrategyToDB(campaignId, strategy);
-        console.log(`[Pipeline] ✓ Strategy saved: ${strategyId}`);
-      } catch (error) {
-        console.error('[Pipeline] ⚠ Failed to save strategy:', error);
-        // Continue without strategy_id - non-blocking
+        console.log(`[Pipeline] Strategy saved: ${strategyId}`);
+      } catch (err) {
+        console.error('[Pipeline] Failed to save strategy (non-fatal):', err);
       }
     }
 
-    // ========================================================================
-    // STEP 3: FETCH FESTIVALS (if enabled)
-    // ========================================================================
-    
+    // ── Step 4: Fetch Festivals ──────────────────────────────────────────────
     let festivals: FestivalEvent[] = [];
-    
     if (normalizedInput.festival_enabled) {
-      const { getFestivalsForDateRange } = await import('../services/festivalApi');
-      
       try {
-        // Calculate date range from normalized input
-        const startDate = new Date(); // Campaign starts today
+        const { getFestivalsForDateRange } = await import('../services/festivalApi');
+        const startDate = new Date();
         const endDate = new Date(startDate);
         endDate.setDate(endDate.getDate() + normalizedInput.total_days);
-        
-        // Map geography to country code (basic mapping)
-        const countryCode = getCountryCode(normalizedInput.geography);
-        
-        festivals = await getFestivalsForDateRange(startDate, endDate, countryCode);
-        console.log(`[Pipeline] ✓ Loaded ${festivals.length} festivals`);
-      } catch (error) {
-        console.error('[Pipeline] ⚠ Failed to fetch festivals, continuing without them:', error);
-        // Continue with empty festivals array
+        festivals = await getFestivalsForDateRange(
+          startDate,
+          endDate,
+          getCountryCode(normalizedInput.geography)
+        );
+        console.log(`[Pipeline] Loaded ${festivals.length} festivals`);
+      } catch (err) {
+        console.error('[Pipeline] Festival fetch failed (non-fatal):', err);
       }
     }
 
-    // ========================================================================
-    // STEP 4: GENERATE CONTENT CALENDAR
-    // ========================================================================
-    // Creates posting schedule with festival integration and AI topics
-    // Now async due to AI-based topic generation
-    
+    // ── Step 5: Generate Calendar ────────────────────────────────────────────
     const calendar = await generateCalendar(normalizedInput, strategy, festivals, campaignId);
 
-    // Save calendar to database
     if (campaignId && strategyId) {
       try {
         await saveCalendarToDB(campaignId, strategyId, calendar);
-        console.log(`[Pipeline] ✓ Calendar saved: ${calendar.length} entries`);
-      } catch (error) {
-        console.error('[Pipeline] ⚠ Failed to save calendar:', error);
-        // Continue without saved calendar - non-blocking
+        console.log(`[Pipeline] Calendar saved: ${calendar.length} entries`);
+      } catch (err) {
+        console.error('[Pipeline] Failed to save calendar (non-fatal):', err);
       }
     }
 
-    // ========================================================================
-    // STEP 5: GENERATE POSTS
-    // ========================================================================
-    // For each calendar entry: generate caption (AI) + image (AI) + upload
-    // Async, parallel processing possible, handle individual failures
-    
-    const posts = await generatePosts(calendar, normalizedInput, strategy);
+    // ── Step 6: Generate Posts (captions + image prompts) ────────────────────
+    const posts = await generatePosts(calendar, normalizedInput, strategy, websiteContext);
 
-    // ========================================================================
-    // STEP 6: SAVE POSTS TO DATABASE (if campaignId provided)
-    // ========================================================================
-    
+    // ── Step 7: Save Posts ───────────────────────────────────────────────────
     if (campaignId) {
-      console.log(`[Pipeline] Saving posts to database for campaign: ${campaignId}`);
       try {
         const savedIds = await savePostsToDB(campaignId, posts);
-        console.log(`[Pipeline] ✓ Saved ${savedIds.length} posts to database`);
-      } catch (error) {
-        console.error('[Pipeline] ⚠ Failed to save posts to database:', error);
-        // Don't fail the entire pipeline if database save fails
-        // Posts are still returned in the response
+        console.log(`[Pipeline] Saved ${savedIds.length} posts`);
+      } catch (err) {
+        console.error('[Pipeline] Failed to save posts (non-fatal):', err);
       }
     }
 
-    // ========================================================================
-    // STEP 7: RETURN OUTPUT
-    // ========================================================================
-    
-    return {
-      strategy,
-      calendar,
-      posts,
-    };
+    return { strategy, calendar, posts };
   } catch (error) {
-    // TODO: Add proper error handling
-    // - Classify errors (validation, AI failure, network, etc.)
-    // - Add retry logic for transient failures
-    // - Add logging
-    // - Return partial results if possible?
-    
     throw new Error(
       `Pipeline failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     );

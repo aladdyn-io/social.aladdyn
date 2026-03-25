@@ -11,22 +11,85 @@ import * as Minio from 'minio';
 import { v4 as uuidv4 } from 'uuid';
 import { ImageGenerationResult } from './imageGenerator';
 
-/**
- * Initialize MinIO client
- * 
- * WHY: Single client instance reused across uploads for efficiency
- * WHY: Environment variables for configuration flexibility
- */
-const minioClient = new Minio.Client({
-  endPoint: process.env.MINIO_ENDPOINT || 'localhost',
-  port: parseInt(process.env.MINIO_PORT || '9000'),
-  useSSL: process.env.MINIO_USE_SSL === 'true',
+interface ParsedMinioEndpoint {
+  endPoint: string;
+  inferredPort?: number;
+  inferredUseSSL?: boolean;
+}
+
+function parseMinioEndpoint(rawEndpoint: string): ParsedMinioEndpoint {
+  const trimmed = rawEndpoint.trim();
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    const url = new URL(trimmed);
+    return {
+      endPoint: url.hostname,
+      inferredPort: url.port ? parseInt(url.port, 10) : url.protocol === 'https:' ? 443 : 80,
+      inferredUseSSL: url.protocol === 'https:',
+    };
+  }
+
+  const endPoint = trimmed.replace(/\/$/, '');
+  return { endPoint };
+}
+
+function toBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
+function toInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+const rawMinioEndpoint = process.env.MINIO_ENDPOINT || 'localhost';
+const parsedEndpoint = parseMinioEndpoint(rawMinioEndpoint);
+const configuredUseSSL = toBoolean(process.env.MINIO_USE_SSL);
+const configuredPort = toInt(process.env.MINIO_PORT);
+
+const minioConfig = {
+  endPoint: parsedEndpoint.endPoint,
+  port: configuredPort ?? parsedEndpoint.inferredPort ?? 9000,
+  useSSL: configuredUseSSL ?? parsedEndpoint.inferredUseSSL ?? false,
   accessKey: process.env.MINIO_ACCESS_KEY || '',
   secretKey: process.env.MINIO_SECRET_KEY || '',
-});
+};
 
+const minioClient = new Minio.Client(minioConfig);
 const bucketName = process.env.MINIO_BUCKET_NAME || 'social-scene';
 const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+const storageType = (process.env.STORAGE_TYPE || 'minio').toLowerCase();
+
+let minioTemporarilyDisabledReason: string | null = null;
+let didLogMinioDisabled = false;
+
+function formatMinioError(error: unknown): string {
+  if (!error) return 'Unknown error';
+
+  if (error instanceof Error) {
+    const base = error.message || error.name;
+    const maybeS3 = error as Error & {
+      code?: string;
+      amzRequestid?: string;
+      amzBucketRegion?: string;
+      statusCode?: number;
+    };
+
+    const extra: string[] = [];
+    if (maybeS3.code) extra.push(`code=${maybeS3.code}`);
+    if (maybeS3.statusCode) extra.push(`status=${maybeS3.statusCode}`);
+    if (maybeS3.amzRequestid) extra.push(`requestId=${maybeS3.amzRequestid}`);
+    if (maybeS3.amzBucketRegion) extra.push(`region=${maybeS3.amzBucketRegion}`);
+
+    return extra.length > 0 ? `${base} (${extra.join(', ')})` : base;
+  }
+
+  return String(error);
+}
 
 /**
  * Uploads image to MinIO storage
@@ -43,22 +106,54 @@ export async function uploadImageToStorage(
   image: ImageGenerationResult,
   prefix: string = 'posts/'
 ): Promise<string> {
+  if (storageType !== 'minio') {
+    return generatePlaceholderUrl(image);
+  }
+
+  if (minioTemporarilyDisabledReason) {
+    if (!didLogMinioDisabled) {
+      console.warn(
+        `[ObjectStorage] ⚠ MinIO temporarily disabled for this process: ${minioTemporarilyDisabledReason}`
+      );
+      didLogMinioDisabled = true;
+    }
+    return generatePlaceholderUrl(image);
+  }
+
   // ============================================================================
   // OPTION 1: Try real upload if credentials exist, fallback to placeholder
   // ============================================================================
   
   const hasMinioCredentials = 
-    process.env.MINIO_ACCESS_KEY && 
-    process.env.MINIO_SECRET_KEY &&
-    process.env.MINIO_ENDPOINT;
+    minioConfig.accessKey &&
+    minioConfig.secretKey &&
+    minioConfig.endPoint;
 
   if (hasMinioCredentials) {
-    try {
-      return await uploadToMinIO(image, prefix);
-    } catch (error) {
-      console.warn('[ObjectStorage] ⚠ MinIO upload failed, using placeholder:', error);
-      return generatePlaceholderUrl(image);
+    const MAX_RETRIES = 3;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await uploadToMinIO(image, prefix);
+      } catch (error) {
+        lastError = error;
+        const details = formatMinioError(error);
+        console.warn(
+          `[ObjectStorage] ⚠ MinIO upload attempt ${attempt}/${MAX_RETRIES} failed: ${details}`
+        );
+
+        if (attempt < MAX_RETRIES) {
+          // Exponential backoff: 1s, 2s
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
+      }
     }
+
+    const details = formatMinioError(lastError);
+    minioTemporarilyDisabledReason = details;
+    console.error(`[ObjectStorage] ✗ All ${MAX_RETRIES} MinIO retries exhausted, using placeholder: ${details}`);
+    return generatePlaceholderUrl(image);
   } else {
     // No credentials - use placeholder
     console.log('[ObjectStorage] ⚠ MinIO not configured, using placeholder image');
@@ -116,9 +211,18 @@ async function uploadToMinIO(
 
     return imageUrl;
   } catch (error) {
-    console.error('[ObjectStorage] ✗ MinIO upload failed:', error);
+    const details = formatMinioError(error);
+    console.error(`[ObjectStorage] ✗ MinIO upload failed: ${details}`);
+
+    if (!process.env.MINIO_USE_SSL && rawMinioEndpoint.includes('railway.app')) {
+      console.error(
+        '[ObjectStorage] Hint: Railway-hosted S3 endpoints typically require HTTPS. ' +
+          'Set MINIO_USE_SSL=true or use an https:// MINIO_ENDPOINT.'
+      );
+    }
+
     throw new Error(
-      `Failed to upload to MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to upload to MinIO: ${details}`
     );
   }
 }
@@ -138,9 +242,9 @@ function buildPublicUrl(objectKey: string): string {
   }
 
   // Fallback: construct URL from MinIO endpoint
-  const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
-  const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
-  const port = process.env.MINIO_PORT || '9000';
+  const protocol = minioConfig.useSSL ? 'https' : 'http';
+  const endpoint = minioConfig.endPoint;
+  const port = String(minioConfig.port);
 
   // WHY: Include port only if not standard (80/443)
   const portSuffix = (port === '80' || port === '443') ? '' : `:${port}`;

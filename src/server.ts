@@ -13,9 +13,10 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { v4 as uuidv4 } from 'uuid';
 import { runContentPipeline } from './pipeline/runContentPipeline';
-import { getCampaignFromDB, getPostsByCampaign, getPostsByDate, saveCampaignToDB } from './db/database';
+import { getCampaignFromDB, getPostsByCampaign, getPostsByDate } from './db/database';
+import prisma from './lib/prisma';
+import { CampaignStatus } from '@prisma/client';
 import {
   editPost,
   regeneratePost,
@@ -36,6 +37,8 @@ import {
   asyncHandler,
   AppError,
 } from './middleware/errorHandler';
+import { requireAuth } from './middleware/auth';
+import { fetchGenieContext } from './services/genieContext';
 import cache from './services/cache';
 
 // ============================================================================
@@ -43,7 +46,7 @@ import cache from './services/cache';
 // ============================================================================
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '4000', 10);
 const HOST = process.env.HOST || '0.0.0.0'; // Listen on all network interfaces
 
 // Middleware
@@ -77,15 +80,24 @@ app.use((req, res, next) => {
  * 
  * Returns server health and service availability
  */
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', async (req: Request, res: Response) => {
+  let dbStatus: 'ok' | 'error' = 'ok';
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    dbStatus = 'error';
+  }
+
+  const allOk = dbStatus === 'ok';
+
   const response: ApiResponse<HealthCheckResponse> = {
-    success: true,
+    success: allOk,
     data: {
-      status: 'ok',
+      status: allOk ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       services: {
-        database: 'ok', // TODO: Add actual health checks
+        database: dbStatus,
         openai: 'ok',
         storage: 'ok',
         imageGeneration: 'ok',
@@ -96,7 +108,7 @@ app.get('/health', (req: Request, res: Response) => {
     },
   };
 
-  res.json(response);
+  res.status(allOk ? 200 : 503).json(response);
 });
 
 /**
@@ -149,15 +161,16 @@ app.post('/api/v1/cache/clear', (req: Request, res: Response) => {
  */
 app.post(
   '/api/v1/generate-content',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const startTime = Date.now();
-    
+
     console.log('[API] Starting content generation with direct input...');
 
     // Validate request body
-    const requestData = req.body as GenerateContentRequest;
-    
-    if (!requestData.input) {
+    const { input, funnelId } = req.body as GenerateContentRequest & { funnelId?: string };
+
+    if (!input) {
       throw new AppError(
         ApiErrorCode.INVALID_INPUT,
         'Request body must include "input" field with ContentInput data',
@@ -165,49 +178,46 @@ app.post(
       );
     }
 
-    const input: ContentInput = requestData.input;
-
-    // Validate required fields
-    const requiredFields = [
-      'industry',
-      'total_days',
-      'frequency_per_week',
-      'services',
-    ] as const;
-    const missingFields = requiredFields.filter((field) => !input[field as keyof ContentInput]);
-    
-    if (missingFields.length > 0) {
-      throw new AppError(
-        ApiErrorCode.MISSING_REQUIRED_FIELD,
-        `Missing required fields: ${missingFields.join(', ')}`,
-        400,
-        { missingFields }
-      );
-    }
-
     // Run pipeline
     try {
-      // Generate a campaign ID and save campaign to database
-      const campaignId = uuidv4();
-      
-      // Convert ContentInput to DatabaseInput format for saving
-      const dbInput: any = {
-        industry: input.industry,
-        total_days: input.total_days,
-        frequency_per_week: input.frequency_per_week,
-        festival_enabled: input.festival_enabled ?? true,
-        logo_url: input.logo_url || 'https://example.com/logo.png',
-        font_style: input.font_style || 'Roboto',
-        accent_color: input.accent_color || '#667eea',
-        base_color: input.base_color || '#764ba2',
-        services: input.services,
-        geography: input.geography || 'India',
-      };
-      
-      // Save campaign first (posts have foreign key constraint)
-      await saveCampaignToDB(campaignId, dbInput);
-      
-      const output = await runContentPipeline(input, campaignId);
+      const userId = (req as any).user?.id || 'anonymous';
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + (input.total_days || 30));
+
+      // Create SocialCampaign in Prisma (social.* schema)
+      const campaign = await prisma.socialCampaign.create({
+        data: {
+          funnelId: funnelId || 'direct',
+          userId,
+          name: `${input.industry || 'Social'} Campaign`,
+          startDate,
+          endDate,
+          timezone: 'Asia/Kolkata',
+          totalDays: input.total_days,
+          frequencyPerWeek: input.frequency_per_week,
+          platforms: ['instagram', 'linkedin'],
+          contentMix: { photo: 4, reel: 2, carousel: 2, story: 1, written: 2 },
+          industry: input.industry,
+          geography: input.geography || 'India',
+          companyDesc: undefined,
+          brandLogo: input.logo_url || undefined,
+          brandColor: input.base_color || undefined,
+          accentColor: input.accent_color || undefined,
+          services: input.services || [],
+          festivalEnabled: input.festival_enabled ?? true,
+          status: 'GENERATING',
+        },
+      });
+      const campaignId = campaign.id;
+
+      const output = await runContentPipeline(input, campaignId, funnelId);
+
+      // Mark campaign as ready
+      await prisma.socialCampaign.update({
+        where: { id: campaignId },
+        data: { status: 'READY' },
+      });
       const processingTime = Date.now() - startTime;
 
       console.log(`[API] ✓ Content generation completed in ${processingTime}ms`);
@@ -220,21 +230,24 @@ app.post(
         const postsFromDB = await getPostsByCampaign(campaignId);
         console.log(`[API] DEBUG: First post from DB:`, postsFromDB[0]);
         postsWithIds = postsFromDB.map((dbPost: any) => ({
-          entryId: dbPost.entry_id || dbPost.post_id,
-          postId: dbPost.post_id,
-          scheduledDate: dbPost.scheduled_date,
+          entryId: dbPost.id,
+          postId: dbPost.id,
+          scheduledDate: dbPost.scheduledDate,
           caption: dbPost.caption,
           hashtags: dbPost.hashtags,
-          callToAction: dbPost.call_to_action,
-          imageUrl: dbPost.image_url,
-          detailedImagePrompt: dbPost.detailed_image_prompt,
+          callToAction: dbPost.callToAction,
+          imageUrl: dbPost.imageUrl,
+          detailedImagePrompt: dbPost.imagePrompt,
+          platform: dbPost.platform,
+          contentType: dbPost.contentType,
+          status: dbPost.status,
           metadata: {
-            contentPillar: dbPost.content_pillar,
-            festival: dbPost.festival_name,
-            generatedAt: dbPost.created_at,
+            contentPillar: dbPost.contentPillar,
+            festival: dbPost.festivalName,
+            generatedAt: dbPost.createdAt,
             topic: dbPost.topic,
-            imageModel: dbPost.image_model,
-            imageGenerated: !!dbPost.image_url,
+            imageModel: dbPost.imageModel,
+            imageGenerated: dbPost.imageGenerated,
           },
         }));
         console.log(`[API] DEBUG: First mapped post:`, postsWithIds[0]);
@@ -297,6 +310,7 @@ app.post(
  */
 app.post(
   '/api/v1/campaigns/:campaignId/generate',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const startTime = Date.now();
     const { campaignId } = req.params;
@@ -389,6 +403,7 @@ app.post('/api/v1/test', (req: Request, res: Response) => {
  */
 app.get(
   '/api/v1/campaigns/:campaignId/posts',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
     const { date } = req.query;
@@ -439,6 +454,7 @@ app.get(
  */
 app.put(
   '/api/v1/posts/:postId',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
     const updates = req.body;
@@ -487,6 +503,7 @@ app.put(
  */
 app.post(
   '/api/v1/posts/:postId/regenerate',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
     const { regenerateImage = false } = req.body;
@@ -525,6 +542,7 @@ app.post(
  */
 app.delete(
   '/api/v1/posts/:postId',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
 
@@ -571,6 +589,7 @@ app.delete(
  */
 app.post(
   '/api/v1/posts/:postId/generate-image',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
     const startTime = Date.now();
@@ -621,6 +640,7 @@ app.post(
  */
 app.post(
   '/api/v1/posts/generate-images/batch',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postIds } = req.body;
     const startTime = Date.now();
@@ -676,6 +696,142 @@ app.post(
 );
 
 /**
+ * List all campaigns for the authenticated user
+ * GET /api/v1/campaigns
+ */
+app.get(
+  '/api/v1/campaigns',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const campaigns = await prisma.socialCampaign.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { posts: true } } },
+    });
+
+    res.json({
+      success: true,
+      data: { campaigns },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
+ * Get a single campaign with its posts
+ * GET /api/v1/campaigns/:campaignId
+ */
+app.get(
+  '/api/v1/campaigns/:campaignId',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    const campaign = await prisma.socialCampaign.findUniqueOrThrow({
+      where: { id: campaignId },
+      include: { strategy: true, _count: { select: { posts: true } } },
+    });
+
+    res.json({
+      success: true,
+      data: { campaign },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
+ * Sync Instagram credentials from server.aladdyn into campaign
+ * POST /api/v1/campaigns/:campaignId/connect-instagram
+ *
+ * Fetches igUserId + accessToken from server.aladdyn's internal API
+ * and stores them on the SocialCampaign record.
+ */
+app.post(
+  '/api/v1/campaigns/:campaignId/connect-instagram',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
+
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true, funnelId: true },
+    });
+
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
+
+    // Fetch credentials from server.aladdyn
+    const serverApiUrl = process.env.SERVER_API_URL || 'http://localhost:3001';
+    const internalSecret = process.env.INTERNAL_API_SECRET || 'aladdyn-internal-secret';
+
+    const credRes = await fetch(
+      `${serverApiUrl}/api/instagram/credentials/${campaign.funnelId}`,
+      {
+        headers: { 'x-internal-secret': internalSecret },
+      }
+    );
+
+    if (!credRes.ok) {
+      const errData = (await credRes.json().catch(() => ({}))) as Record<string, unknown>;
+      throw new AppError(
+        ApiErrorCode.PIPELINE_FAILED,
+        (errData.error as string) || 'No Instagram account connected to this genie',
+        credRes.status === 404 ? 404 : 500
+      );
+    }
+
+    const credData = (await credRes.json()) as {
+      data: { igUserId: string; accessToken: string };
+    };
+
+    // Store on campaign
+    await prisma.socialCampaign.update({
+      where: { id: campaignId },
+      data: {
+        igUserId: credData.data.igUserId,
+        accessToken: credData.data.accessToken,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        campaignId,
+        igUserId: credData.data.igUserId,
+        connected: true,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
+ * Approve a post (moves it to APPROVED — scheduler will enqueue it)
+ * POST /api/v1/posts/:postId/approve
+ */
+app.post(
+  '/api/v1/posts/:postId/approve',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postId } = req.params;
+
+    const post = await prisma.socialPost.update({
+      where: { id: postId },
+      data: { status: 'APPROVED', approvedAt: new Date() },
+    });
+
+    res.json({
+      success: true,
+      data: { post, message: 'Post approved — will be published at scheduled time' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
  * Add extra post for specific date
  * POST /api/v1/campaigns/:campaignId/posts/add
  * 
@@ -683,6 +839,7 @@ app.post(
  */
 app.post(
   '/api/v1/campaigns/:campaignId/posts/add',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
     const { date, pillar, topic, isFestival, festivalName } = req.body;
@@ -728,6 +885,78 @@ app.post(
   })
 );
 
+/**
+ * Update campaign status (run / pause)
+ * PATCH /api/v1/campaigns/:campaignId/status
+ *
+ * Body: { status: 'ACTIVE' | 'PAUSED' }
+ */
+app.patch(
+  '/api/v1/campaigns/:campaignId/status',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    const userId = req.user?.id;
+    const { status } = req.body as { status: string };
+
+    const allowedStatuses: string[] = [CampaignStatus.ACTIVE, CampaignStatus.PAUSED];
+    if (!allowedStatuses.includes(status)) {
+      throw new AppError(ApiErrorCode.INVALID_INPUT, 'status must be ACTIVE or PAUSED', 400);
+    }
+
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+    });
+
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
+
+    const updated = await prisma.socialCampaign.update({
+      where: { id: campaignId },
+      data: { status: status as CampaignStatus },
+    });
+
+    res.json({
+      success: true,
+      data: { campaignId, status: updated.status },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
+ * Get activation context for a funnel (scraped business data preview)
+ * GET /api/v1/funnels/:funnelId/activation-context
+ *
+ * Returns derived campaign params from genie scraped data.
+ */
+app.get(
+  '/api/v1/funnels/:funnelId/activation-context',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { funnelId } = req.params;
+
+    const genieCtx = await fetchGenieContext(funnelId);
+
+    res.json({
+      success: true,
+      data: {
+        companyName: genieCtx?.companyName ?? null,
+        industry: genieCtx?.industry ?? null,
+        geography: genieCtx?.geography ?? null,
+        tone: genieCtx?.tone ?? null,
+        websiteUrl: genieCtx?.websiteUrl ?? null,
+        websiteSummary: genieCtx?.websiteSummary ?? null,
+        // Fixed campaign defaults
+        total_days: 30,
+        frequency_per_week: 4,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
@@ -746,7 +975,7 @@ app.use(errorHandler);
  * Start the server
  */
 function startServer() {
-  app.listen(PORT, HOST, () => {
+  app.listen(PORT, HOST, async () => {
     console.log('='.repeat(80));
     console.log('Social Scene Content Generation API');
     console.log('='.repeat(80));
@@ -754,7 +983,7 @@ function startServer() {
     console.log(`  - Local:   http://localhost:${PORT}`);
     console.log(`  - Network: http://${getNetworkIP()}:${PORT} (if available)`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Image Provider: ${process.env.IMAGE_PROVIDER || 'huggingface'}`);
+    console.log(`Image Provider: ${process.env.IMAGE_PROVIDER || 'local'}`);
     console.log('');
     console.log('Available endpoints:');
     console.log(`  GET    http://localhost:${PORT}/health`);
@@ -767,6 +996,22 @@ function startServer() {
     console.log(`  DELETE http://localhost:${PORT}/api/v1/posts/:id`);
     console.log(`  POST   http://localhost:${PORT}/api/v1/test`);
     console.log('='.repeat(80));
+
+    // ── BullMQ workers + scheduler ─────────────────────────────────────────
+    // Only start if Redis is reachable; failure is non-fatal in dev
+    try {
+      const { startPublishWorker } = await import('./jobs/workers/publishWorker');
+      const { startImageGenWorker } = await import('./jobs/workers/imageGenWorker');
+      const { startScheduler } = await import('./jobs/scheduler');
+
+      startPublishWorker();
+      startImageGenWorker();
+      startScheduler();
+
+      console.log('[Server] BullMQ workers + scheduler running');
+    } catch (err) {
+      console.warn('[Server] BullMQ init skipped (Redis unavailable?):', (err as Error).message);
+    }
   });
 }
 

@@ -1,0 +1,174 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  schemas    = ["social"]
+}
+
+// ── Social Campaigns ─────────────────────────────────────────────────────────
+// Each campaign belongs to a Funnel (from server.aladdyn).
+// funnelId and userId are cross-service references — not enforced by Prisma FK.
+
+model SocialCampaign {
+  id     String @id @default(uuid())
+  // Cross-service references to server.aladdyn
+  funnelId String // FK → funnels.id in server.aladdyn
+  userId   String // FK → users.id in server.aladdyn
+
+  // Campaign identity
+  name String?
+
+  // Schedule
+  startDate        DateTime
+  endDate          DateTime
+  timezone         String   @default("Asia/Kolkata")
+  totalDays        Int
+  frequencyPerWeek Int
+
+  // Platform & content requirements (from activation form)
+  platforms   String[] // ["instagram", "linkedin"]
+  contentMix  Json     // { photo: 4, reel: 2, carousel: 2, story: 1, written: 2 }
+  postingTimes Json?   // { instagram: ["09:00", "18:00"], linkedin: ["10:00"] }
+
+  // Brand context — snapshot from funnel at activation time
+  industry    String?
+  geography   String?
+  companyName String?
+  companyDesc String?  @db.Text
+  websiteUrl  String?
+  tone        String?
+  brandLogo   String?
+  brandColor  String?
+  accentColor String?
+  services    String[]
+
+  // Instagram credentials (set at campaign creation from connected account)
+  igUserId    String? // IG Business/Creator account ID
+  accessToken String? @db.Text // long-lived user access token (store encrypted at rest)
+
+  // AI options
+  festivalEnabled Boolean      @default(true)
+  goal            CampaignGoal @default(AWARENESS)
+
+  // Lifecycle
+  status    CampaignStatus @default(DRAFT)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  strategy SocialStrategy?
+  posts    SocialPost[]
+
+  @@index([funnelId])
+  @@index([userId])
+  @@index([status])
+  @@map("social_campaigns")
+  @@schema("social")
+}
+
+enum CampaignGoal {
+  AWARENESS
+  CONSIDERATION
+  CONVERSION
+  RETENTION
+
+  @@schema("social")
+}
+
+enum CampaignStatus {
+  DRAFT
+  GENERATING
+  READY
+  ACTIVE
+  PAUSED
+  COMPLETED
+
+  @@schema("social")
+}
+
+// ── Social Strategy ──────────────────────────────────────────────────────────
+model SocialStrategy {
+  id         String @id @default(uuid())
+  campaignId String @unique
+
+  contentPillars String[]
+  tone           String?
+  ctaStyle       String?
+  contentMix     Json     // { education: 30, trust: 50, promotion: 20 }
+  hashtagGroups  Json?
+  campaignPhases Json?
+  modelUsed      String?
+
+  createdAt DateTime @default(now())
+
+  campaign SocialCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("social_strategies")
+  @@schema("social")
+}
+
+// ── Social Posts ─────────────────────────────────────────────────────────────
+model SocialPost {
+  id         String @id @default(uuid())
+  campaignId String
+
+  // Schedule
+  scheduledDate DateTime
+  scheduledTime String   @default("10:00") // HH:mm
+  timezone      String   @default("Asia/Kolkata")
+
+  // Target
+  platform    String // "instagram" | "linkedin"
+  contentType String // "photo" | "reel" | "carousel" | "story" | "written"
+
+  // Content
+  caption     String?  @db.Text
+  hashtags    String[]
+  callToAction String?
+
+  // Image lifecycle
+  imagePrompt    String? @db.Text // detailed prompt for AI generation
+  imageUrl       String? // MinIO URL after generation
+  imageGenerated Boolean @default(false)
+  imageModel     String?
+
+  // Metadata
+  contentPillar String?
+  topic         String?
+  isFestival    Boolean @default(false)
+  festivalName  String?
+
+  // Publish lifecycle
+  status         PostStatus @default(DRAFT)
+  approvedAt     DateTime?
+  publishedAt    DateTime?
+  platformPostId String?    // ID returned by Meta/LinkedIn after publish
+  publishError   String?    @db.Text
+  publishAttempts Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign SocialCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, scheduledDate])
+  @@index([status, scheduledDate])
+  @@index([platform, status])
+  @@map("social_posts")
+  @@schema("social")
+}
+
+enum PostStatus {
+  DRAFT
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  POSTED
+  FAILED
+  DELETED
+
+  @@schema("social")
+}

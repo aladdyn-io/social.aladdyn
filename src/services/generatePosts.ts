@@ -41,7 +41,8 @@ import { generateDetailedImagePrompt } from './generateImagePrompt';
 export async function generatePosts(
   calendar: CalendarItem[],
   input: NormalizedInput,
-  strategy: Strategy
+  strategy: Strategy,
+  websiteContext?: string
 ): Promise<PostItem[]> {
   console.log(`[GeneratePosts] Starting PARALLEL generation for ${calendar.length} posts...`);
 
@@ -69,7 +70,7 @@ export async function generatePosts(
 
           // PARALLEL: Generate caption AND prompt simultaneously
           const [caption, detailedPrompt] = await Promise.all([
-            generateCaption(entry, strategy, input),
+            generateCaption(entry, strategy, input, websiteContext),
             generateDetailedImagePrompt(entry, strategy, input)
           ]);
 
