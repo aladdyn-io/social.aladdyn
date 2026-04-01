@@ -12,11 +12,14 @@ import prisma from '../../lib/prisma';
 import { redisConnection } from '../redis';
 import { QUEUE_NAMES, PublishJobData } from '../queues';
 import { publishToInstagram, IgContentType } from '../../services/instagramPublisher';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger({ service: 'publish-worker' });
 
 async function processPublish(job: Job<PublishJobData>): Promise<void> {
   const { postId, campaignId, platform } = job.data;
 
-  console.log(`[PublishWorker] Processing post ${postId} on ${platform}...`);
+  logger.info('Processing post', { postId, platform });
 
   // Lock the post
   await prisma.socialPost.update({
@@ -112,10 +115,10 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
       },
     });
 
-    console.log(`[PublishWorker] ✓ Post ${postId} published on ${platform} (id=${platformPostId})`);
+    logger.info('Post published', { postId, platform, platformPostId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[PublishWorker] ✗ Publish failed for ${postId}:`, message);
+    logger.error('Publish failed', { postId, platform, error: message });
 
     await prisma.socialPost.update({
       where: { id: postId },
@@ -147,13 +150,13 @@ export function startPublishWorker(): Worker<PublishJobData> {
   });
 
   worker.on('completed', (job) => {
-    console.log(`[PublishWorker] Job ${job.id} completed`);
+    logger.info('Job completed', { jobId: job.id ?? '' });
   });
 
   worker.on('failed', (job, err) => {
-    console.error(`[PublishWorker] Job ${job?.id} failed:`, err.message);
+    logger.error('Job failed', { jobId: job?.id ?? '', error: err.message });
   });
 
-  console.log('[PublishWorker] Started (concurrency: 3)');
+  logger.info('Started', { concurrency: '3' });
   return worker;
 }

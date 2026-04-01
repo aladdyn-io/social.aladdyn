@@ -21,6 +21,10 @@ export async function getCampaignFromDB(campaignId: string): Promise<ContentInpu
 
   console.log('[Database] ✓ Campaign fetched successfully');
 
+  const primaryPlatform = campaign.platforms[0] ?? 'instagram';
+  const postingTimes = campaign.postingTimes as Record<string, string[]> | null;
+  const scheduledTime = postingTimes?.[primaryPlatform]?.[0] ?? '10:00';
+
   return {
     industry: campaign.industry || '',
     total_days: campaign.totalDays,
@@ -32,6 +36,9 @@ export async function getCampaignFromDB(campaignId: string): Promise<ContentInpu
     base_color: campaign.brandColor || '#764ba2',
     services: campaign.services,
     geography: campaign.geography || 'India',
+    platform: primaryPlatform,
+    timezone: campaign.timezone,
+    scheduledTime,
   };
 }
 
@@ -49,9 +56,12 @@ export async function saveCampaignToDB(campaignId: string, _input: any): Promise
 
 export async function savePostsToDB(
   campaignId: string,
-  posts: PostItem[]
+  posts: PostItem[],
+  platform: string = 'instagram',
+  scheduledTime: string = '10:00',
+  timezone: string = 'Asia/Kolkata'
 ): Promise<string[]> {
-  console.log(`[Database] Saving ${posts.length} posts for campaign ${campaignId}...`);
+  console.log(`[Database] Saving ${posts.length} posts for campaign ${campaignId} (platform: ${platform})...`);
 
   const results = await prisma.$transaction(
     posts.map((post) =>
@@ -59,9 +69,9 @@ export async function savePostsToDB(
         data: {
           campaignId,
           scheduledDate: post.scheduledDate,
-          scheduledTime: '10:00',
-          timezone: 'Asia/Kolkata',
-          platform: 'instagram',
+          scheduledTime,
+          timezone,
+          platform,
           contentType: 'photo',
           caption: post.caption,
           hashtags: post.hashtags,

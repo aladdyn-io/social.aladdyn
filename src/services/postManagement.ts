@@ -138,7 +138,9 @@ export async function regeneratePost(
     trust_weight: 50,
     education_weight: 30,
     promo_weight: 20,
-    platform: 'instagram',
+    platform: campaignData.platform ?? existingPost.platform ?? 'instagram',
+    timezone: campaignData.timezone ?? 'Asia/Kolkata',
+    scheduledTime: campaignData.scheduledTime ?? '10:00',
   };
 
   // ========================================================================
@@ -249,7 +251,9 @@ export async function addExtraPost(
     trust_weight: 50,
     education_weight: 30,
     promo_weight: 20,
-    platform: 'instagram',
+    platform: campaignData.platform ?? 'instagram',
+    timezone: campaignData.timezone ?? 'Asia/Kolkata',
+    scheduledTime: campaignData.scheduledTime ?? '10:00',
   };
 
   // Create calendar item
@@ -302,7 +306,13 @@ export async function addExtraPost(
   };
 
   // Save to database
-  const savedIds = await savePostsToDB(campaignId, [post]);
+  const savedIds = await savePostsToDB(
+    campaignId,
+    [post],
+    normalizedInput.platform,
+    normalizedInput.scheduledTime,
+    normalizedInput.timezone
+  );
 
   // Fetch and return the saved post
   const savedPost = await getPostById(savedIds[0]);

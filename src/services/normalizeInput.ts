@@ -34,6 +34,8 @@ export interface NormalizedInput {
   education_weight: number;
   promo_weight: number;
   platform: string;
+  timezone: string;
+  scheduledTime: string;
 }
 
 /**
@@ -106,11 +108,12 @@ export function normalizeInput(input: ContentInput): NormalizedInput {
   const education_weight = 1 - trust_weight - promo_weight;
 
   // ========================================================================
-  // SET DEFAULT PLATFORM
-  // WHY: Instagram is default for social media content
+  // SET PLATFORM, TIMEZONE, SCHEDULED TIME FROM INPUT (with defaults)
   // ========================================================================
 
-  const platform = 'instagram';
+  const platform = input.platform ?? 'instagram';
+  const timezone = input.timezone ?? 'Asia/Kolkata';
+  const scheduledTime = input.scheduledTime ?? '10:00';
 
   // ========================================================================
   // RETURN NORMALIZED INPUT
@@ -135,5 +138,7 @@ export function normalizeInput(input: ContentInput): NormalizedInput {
     education_weight,
     promo_weight,
     platform,
+    timezone,
+    scheduledTime,
   };
 }

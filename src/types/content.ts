@@ -48,6 +48,15 @@ export interface ContentInput {
 
   /** Campaign goal/objective */
   campaign_goal?: 'awareness' | 'consideration' | 'conversion' | 'retention';
+
+  /** Primary platform for this campaign (e.g., 'instagram', 'linkedin') */
+  platform?: string;
+
+  /** Campaign timezone (e.g., 'Asia/Kolkata') */
+  timezone?: string;
+
+  /** Scheduled posting time in HH:mm format (e.g., '10:00') */
+  scheduledTime?: string;
 }
 
 // ============================================================================

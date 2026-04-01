@@ -16,6 +16,9 @@ import {
   saveStrategyToDB,
   saveCalendarToDB,
 } from '../db/database';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger({ service: 'content-pipeline' });
 
 function getCountryCode(geography: string): string {
   const mapping: Record<string, string> = {
@@ -46,7 +49,7 @@ export async function runContentPipeline(
       if (genieCtx) {
         if (genieCtx.websiteSummary) {
           websiteContext = genieCtx.websiteSummary;
-          console.log(`[Pipeline] Got website context (${websiteContext.length} chars) from genie`);
+          logger.info('Got website context from genie', { chars: String(websiteContext.length) });
         }
         // Auto-populate missing input fields from scraped data
         enrichedInput = {
@@ -55,9 +58,9 @@ export async function runContentPipeline(
           geography: input.geography?.trim() || genieCtx.geography || 'India',
           services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
         };
-        console.log(`[Pipeline] Enriched input — industry: ${enrichedInput.industry}, geography: ${enrichedInput.geography}`);
+        logger.info('Enriched input', { industry: enrichedInput.industry ?? '', geography: enrichedInput.geography ?? '' });
       } else {
-        console.log('[Pipeline] No genie context available — using input data only');
+        logger.info('No genie context available — using input data only');
         enrichedInput = {
           ...input,
           industry: input.industry?.trim() || 'General Business',
@@ -85,9 +88,9 @@ export async function runContentPipeline(
     if (campaignId) {
       try {
         strategyId = await saveStrategyToDB(campaignId, strategy);
-        console.log(`[Pipeline] Strategy saved: ${strategyId}`);
+        logger.info('Strategy saved', { strategyId });
       } catch (err) {
-        console.error('[Pipeline] Failed to save strategy (non-fatal):', err);
+        logger.error('Failed to save strategy (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -104,9 +107,9 @@ export async function runContentPipeline(
           endDate,
           getCountryCode(normalizedInput.geography)
         );
-        console.log(`[Pipeline] Loaded ${festivals.length} festivals`);
+        logger.info('Loaded festivals', { count: String(festivals.length) });
       } catch (err) {
-        console.error('[Pipeline] Festival fetch failed (non-fatal):', err);
+        logger.error('Festival fetch failed (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -116,9 +119,9 @@ export async function runContentPipeline(
     if (campaignId && strategyId) {
       try {
         await saveCalendarToDB(campaignId, strategyId, calendar);
-        console.log(`[Pipeline] Calendar saved: ${calendar.length} entries`);
+        logger.info('Calendar saved', { entries: String(calendar.length) });
       } catch (err) {
-        console.error('[Pipeline] Failed to save calendar (non-fatal):', err);
+        logger.error('Failed to save calendar (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -128,10 +131,16 @@ export async function runContentPipeline(
     // ── Step 7: Save Posts ───────────────────────────────────────────────────
     if (campaignId) {
       try {
-        const savedIds = await savePostsToDB(campaignId, posts);
-        console.log(`[Pipeline] Saved ${savedIds.length} posts`);
+        const savedIds = await savePostsToDB(
+          campaignId,
+          posts,
+          normalizedInput.platform,
+          normalizedInput.scheduledTime,
+          normalizedInput.timezone
+        );
+        logger.info('Posts saved', { count: String(savedIds.length), platform: normalizedInput.platform });
       } catch (err) {
-        console.error('[Pipeline] Failed to save posts (non-fatal):', err);
+        logger.error('Failed to save posts (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
       }
     }
 

@@ -818,6 +818,23 @@ app.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
 
+    const existing = await prisma.socialPost.findUnique({
+      where: { id: postId },
+      select: { status: true },
+    });
+
+    if (!existing) {
+      throw new AppError(ApiErrorCode.INVALID_INPUT, 'Post not found', 404);
+    }
+
+    if (existing.status !== 'DRAFT') {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        `Cannot approve post in '${existing.status}' status — only DRAFT posts can be approved`,
+        400
+      );
+    }
+
     const post = await prisma.socialPost.update({
       where: { id: postId },
       data: { status: 'APPROVED', approvedAt: new Date() },

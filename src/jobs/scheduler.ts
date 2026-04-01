@@ -12,6 +12,9 @@
 
 import { publishQueue } from './queues';
 import prisma from '../lib/prisma';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger({ service: 'scheduler' });
 
 const LOOKAHEAD_MINUTES = 5; // enqueue posts up to 5 min before their target time
 
@@ -32,7 +35,7 @@ export async function scheduleUpcomingPosts(): Promise<void> {
 
   if (posts.length === 0) return;
 
-  console.log(`[Scheduler] Enqueueing ${posts.length} upcoming posts...`);
+  logger.info('Enqueueing upcoming posts', { count: String(posts.length) });
 
   for (const post of posts) {
     const delay = Math.max(0, post.scheduledDate.getTime() - now.getTime());
@@ -52,21 +55,19 @@ export async function scheduleUpcomingPosts(): Promise<void> {
       }
     );
 
-    console.log(
-      `[Scheduler] Enqueued post ${post.id} (${post.platform}) in ${Math.round(delay / 1000)}s`
-    );
+    logger.info('Enqueued post', { postId: post.id, platform: post.platform, delayMs: String(delay) });
   }
 }
 
 /** Start the scheduler poll loop (called once on server boot) */
 export function startScheduler(intervalMs = 60_000): NodeJS.Timeout {
-  console.log('[Scheduler] Starting poll loop (every 60s)');
+  logger.info('Starting poll loop', { intervalMs: String(intervalMs) });
 
   const tick = async () => {
     try {
       await scheduleUpcomingPosts();
     } catch (err) {
-      console.error('[Scheduler] Poll error:', err);
+      logger.error('Poll error', { error: err instanceof Error ? err.message : String(err) });
     }
   };
 
