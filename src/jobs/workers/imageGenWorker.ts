@@ -7,16 +7,42 @@
  */
 
 import { Worker, Job } from 'bullmq';
+import prisma from '../../lib/prisma';
 import { generatePostImage } from '../../services/onDemandImageGeneration';
 import { redisConnection } from '../redis';
 import { QUEUE_NAMES, ImageGenJobData } from '../queues';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger({ service: 'image-gen-worker' });
 
 async function processImageGen(job: Job<ImageGenJobData>): Promise<string> {
   const { postId } = job.data;
-  console.log(`[ImageGenWorker] Generating image for post ${postId}...`);
-  const imageUrl = await generatePostImage(postId);
-  console.log(`[ImageGenWorker] ✓ Done: ${imageUrl}`);
-  return imageUrl;
+  logger.info('Generating image', { postId });
+
+  try {
+    const imageUrl = await generatePostImage(postId);
+    logger.info('Image generated', { postId, imageUrl });
+    return imageUrl;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('Image generation failed', {
+      postId,
+      error: message,
+      attempt: String(job.attemptsMade + 1),
+    });
+
+    // Record the error on the post without changing its status.
+    // Image gen failure ≠ post failure — status stays DRAFT so the user
+    // can retry image generation or upload media manually.
+    await prisma.socialPost
+      .update({
+        where: { id: postId },
+        data: { publishError: `Image gen attempt ${job.attemptsMade + 1}: ${message}` },
+      })
+      .catch(() => {}); // never block the rethrow
+
+    throw err; // let BullMQ retry (imageGenQueue: 2 attempts, 5s fixed backoff)
+  }
 }
 
 export function startImageGenWorker(): Worker<ImageGenJobData> {
@@ -28,13 +54,13 @@ export function startImageGenWorker(): Worker<ImageGenJobData> {
   });
 
   worker.on('completed', (job) => {
-    console.log(`[ImageGenWorker] Job ${job.id} completed`);
+    logger.info('Job completed', { jobId: job.id ?? '' });
   });
 
   worker.on('failed', (job, err) => {
-    console.error(`[ImageGenWorker] Job ${job?.id} failed:`, err.message);
+    logger.error('Job failed', { jobId: job?.id ?? '', error: err.message });
   });
 
-  console.log(`[ImageGenWorker] Started (concurrency: ${concurrency})`);
+  logger.info('Started', { concurrency: String(concurrency) });
   return worker;
 }

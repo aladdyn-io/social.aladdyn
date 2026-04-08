@@ -52,6 +52,9 @@ export interface ContentInput {
   /** Primary platform for this campaign (e.g., 'instagram', 'linkedin') */
   platform?: string;
 
+  /** All platforms for this campaign — drives multi-platform post generation */
+  platforms?: string[];
+
   /** Campaign timezone (e.g., 'Asia/Kolkata') */
   timezone?: string;
 

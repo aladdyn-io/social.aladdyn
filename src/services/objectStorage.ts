@@ -253,8 +253,36 @@ function buildPublicUrl(objectKey: string): string {
 }
 
 /**
+ * Uploads a raw user-supplied Buffer to storage.
+ *
+ * For user-uploaded media (multipart file uploads) where there is no
+ * ImageGenerationResult — wraps the buffer into a minimal synthetic
+ * ImageGenerationResult and delegates to uploadImageToStorage so all
+ * MinIO retry/fallback logic is reused automatically.
+ *
+ * @param buffer   - Raw file buffer from multer (memoryStorage)
+ * @param mimeType - MIME type (e.g. "image/jpeg") — informational only
+ * @param prefix   - MinIO path prefix (e.g. campaign ID)
+ */
+export async function uploadBufferToStorage(
+  buffer: Buffer,
+  mimeType: string,
+  prefix: string
+): Promise<string> {
+  const synthetic: ImageGenerationResult = {
+    imageBuffer: buffer,
+    metadata: {
+      model: 'user-upload',
+      dimensions: { width: 0, height: 0 },
+      prompt: mimeType,
+    },
+  };
+  return uploadImageToStorage(synthetic, prefix);
+}
+
+/**
  * Deletes image from MinIO storage
- * 
+ *
  * WHY: Cleanup utility for failed posts or testing
  * NOTE: Not used in main pipeline, but useful for future features
  */

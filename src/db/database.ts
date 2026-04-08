@@ -7,6 +7,7 @@
 
 import prisma from '../lib/prisma';
 import { PostItem, Strategy, CalendarItem, ContentInput } from '../types/content';
+import { CalendarDayGroup, ManualPostData } from '../types/calendar';
 
 // ============================================================================
 // CAMPAIGN FUNCTIONS
@@ -37,6 +38,7 @@ export async function getCampaignFromDB(campaignId: string): Promise<ContentInpu
     services: campaign.services,
     geography: campaign.geography || 'India',
     platform: primaryPlatform,
+    platforms: campaign.platforms,
     timezone: campaign.timezone,
     scheduledTime,
   };
@@ -330,6 +332,95 @@ export async function isTopicDuplicate(
     where: { campaignId, topic: { equals: topic, mode: 'insensitive' } },
   });
   return count > 0;
+}
+
+// ============================================================================
+// CALENDAR HELPERS
+// ============================================================================
+
+/** Returns all posts for a campaign grouped by date (YYYY-MM-DD), sorted ascending */
+export async function getCalendarGrouped(campaignId: string): Promise<CalendarDayGroup[]> {
+  const posts = await prisma.socialPost.findMany({
+    where: { campaignId },
+    orderBy: { scheduledDate: 'asc' },
+  });
+
+  const map = new Map<string, any[]>();
+  for (const post of posts) {
+    const date = post.scheduledDate.toISOString().split('T')[0];
+    if (!map.has(date)) map.set(date, []);
+    map.get(date)!.push(post);
+  }
+
+  return Array.from(map.entries()).map(([date, groupPosts]) => ({ date, posts: groupPosts }));
+}
+
+/** Creates a SocialPost from user-supplied (manual) data */
+export async function createManualPost(
+  campaignId: string,
+  data: ManualPostData
+): Promise<any> {
+  console.log(`[Database] Creating manual post for campaign ${campaignId} on ${data.scheduledDate.toISOString().split('T')[0]}`);
+
+  const post = await prisma.socialPost.create({
+    data: {
+      campaignId,
+      scheduledDate: data.scheduledDate,
+      scheduledTime: data.scheduledTime ?? '10:00',
+      timezone: 'Asia/Kolkata',
+      platform: data.platform,
+      contentType: data.contentType ?? 'photo',
+      caption: data.caption ?? undefined,
+      hashtags: data.hashtags ?? [],
+      callToAction: data.callToAction ?? undefined,
+      imageUrl: data.imageUrl ?? undefined,
+      imageGenerated: !!data.imageUrl,
+      topic: data.topic ?? undefined,
+      contentPillar: data.contentPillar ?? undefined,
+      isFestival: data.isFestival ?? false,
+      festivalName: data.festivalName ?? undefined,
+      status: 'DRAFT',
+    },
+  });
+
+  console.log(`[Database] ✓ Manual post created: ${post.id}`);
+  return post;
+}
+
+// ============================================================================
+// PUBLISH LOG HELPERS
+// ============================================================================
+
+/** Fire-and-forget publish attempt log entry. Never throws. */
+export async function createPublishLog(data: {
+  postId: string;
+  campaignId: string;
+  platform: string;
+  attempt: number;
+  status: 'succeeded' | 'failed';
+  error?: string;
+  jobId?: string;
+}): Promise<void> {
+  await prisma.postPublishLog.create({ data }).catch(() => {});
+}
+
+/** Full attempt history for a post, oldest first */
+export async function getPublishLogsForPost(postId: string): Promise<any[]> {
+  return prisma.postPublishLog.findMany({
+    where: { postId },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/** Posts stuck in PUBLISHING or SCHEDULED for longer than thresholdMinutes */
+export async function getStuckPosts(thresholdMinutes: number): Promise<any[]> {
+  const threshold = new Date(Date.now() - thresholdMinutes * 60_000);
+  return prisma.socialPost.findMany({
+    where: {
+      status: { in: ['PUBLISHING', 'SCHEDULED'] },
+      updatedAt: { lt: threshold },
+    },
+  });
 }
 
 export async function closeDatabase(): Promise<void> {

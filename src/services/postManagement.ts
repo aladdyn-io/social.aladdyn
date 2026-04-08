@@ -11,6 +11,7 @@
 import { PostItem, CalendarItem } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { generateCaption } from './generateCaption';
+import { generateDetailedImagePrompt } from './generateImagePrompt';
 import { generateImage } from './imageGenerator';
 import { uploadImageToStorage } from './objectStorage';
 import {
@@ -18,8 +19,10 @@ import {
   updatePost,
   deletePost as deletePostFromDB,
   getCampaignFromDB,
+  getStrategyByCampaignId,
   savePostsToDB,
 } from '../db/database';
+import prisma from '../lib/prisma';
 import cache, { CacheKey } from './cache';
 
 /**
@@ -76,19 +79,32 @@ export async function editPost(
 }
 
 /**
- * Regenerate post content (caption + image)
- * 
- * Now uses persisted calendar entry and strategy for consistency
- * 
+ * Regenerate post content (caption and/or image prompt and/or image)
+ *
+ * Uses the campaign's persisted strategy from DB for consistency.
+ *
  * @param postId - Post ID from database
- * @param regenerateImage - Whether to regenerate image (default: false)
- * @returns Regenerated post
+ * @param options.regenerateCaption - Regenerate caption (default: true)
+ * @param options.regeneratePrompt  - Regenerate image prompt only (default: false)
+ * @param options.regenerateImage   - Regenerate image prompt + generate actual image (default: false)
  */
 export async function regeneratePost(
   postId: string,
-  regenerateImage: boolean = false
+  options: {
+    regenerateCaption?: boolean;
+    regeneratePrompt?: boolean;
+    regenerateImage?: boolean;
+  } = {}
 ): Promise<any> {
-  console.log(`[PostManagement] Regenerating post ${postId} (image: ${regenerateImage})...`);
+  const {
+    regenerateCaption = true,
+    regeneratePrompt = false,
+    regenerateImage = false,
+  } = options;
+
+  console.log(
+    `[PostManagement] Regenerating post ${postId} (caption:${regenerateCaption} prompt:${regeneratePrompt} image:${regenerateImage})...`
+  );
 
   // Get existing post
   const existingPost = await getPostById(postId);
@@ -97,19 +113,24 @@ export async function regeneratePost(
   }
 
   // ========================================================================
-  // RECONSTRUCT CALENDAR + STRATEGY FROM POST DATA (Prisma camelCase fields)
+  // RECONSTRUCT CALENDAR ITEM FROM POST DATA
   // ========================================================================
 
   const calendarItem: CalendarItem = {
     date: new Date(existingPost.scheduledDate).toISOString().split('T')[0],
     pillar: existingPost.contentPillar || 'General',
     topic: existingPost.topic || existingPost.contentPillar || 'General content',
-    content_type: existingPost.contentType || 'image',
+    content_type: existingPost.contentType || 'photo',
     is_festival: existingPost.isFestival || false,
     festival_name: existingPost.festivalName || undefined,
   };
 
-  const strategy = {
+  // ========================================================================
+  // LOAD REAL STRATEGY FROM DB (fall back to sensible defaults if missing)
+  // ========================================================================
+
+  const savedStrategy = await getStrategyByCampaignId(existingPost.campaignId);
+  const strategy = savedStrategy ?? {
     content_pillars: [calendarItem.pillar],
     tone: 'warm and engaging',
     cta_style: 'inviting',
@@ -126,7 +147,7 @@ export async function regeneratePost(
     industry: campaignData.industry,
     services: campaignData.services,
     geography: campaignData.geography || 'Global',
-    posting_days: 0, // Not needed for single post
+    posting_days: 0,
     base_color: campaignData.base_color || '#000000',
     accent_color: campaignData.accent_color || '#FFFFFF',
     total_days: 1,
@@ -143,50 +164,158 @@ export async function regeneratePost(
     scheduledTime: campaignData.scheduledTime ?? '10:00',
   };
 
+  const updateData: Record<string, any> = {};
+
   // ========================================================================
   // REGENERATE CAPTION
   // ========================================================================
-  
-  const newCaption = await generateCaption(calendarItem, strategy, normalizedInput);
 
-  let newImageUrl = existingPost.imageUrl;
-  let imageMetadata = {
-    imagePrompt: existingPost.imagePrompt,
-    imageModel: existingPost.imageModel,
-  };
-
-  // ========================================================================
-  // REGENERATE IMAGE (if requested)
-  // ========================================================================
-  
-  if (regenerateImage) {
-    const imageResult = await generateImage(calendarItem, normalizedInput);
-    const imageUrl = await uploadImageToStorage(
-      imageResult,
-      existingPost.campaign_id
-    );
-    newImageUrl = imageUrl;
-    imageMetadata = {
-      imagePrompt: imageResult.metadata.prompt || '',
-      imageModel: imageResult.metadata.model,
-    };
+  if (regenerateCaption) {
+    updateData.caption = await generateCaption(calendarItem, strategy, normalizedInput);
   }
 
   // ========================================================================
-  // UPDATE POST IN DATABASE
+  // REGENERATE IMAGE PROMPT (without generating the actual image)
   // ========================================================================
-  
-  const updateData = {
-    caption: newCaption,
-    imageUrl: newImageUrl,
-    imagePrompt: imageMetadata.imagePrompt,
-    imageModel: imageMetadata.imageModel,
-  };
+
+  if (regeneratePrompt && !regenerateImage) {
+    updateData.imagePrompt = await generateDetailedImagePrompt(
+      calendarItem,
+      strategy,
+      normalizedInput
+    );
+  }
+
+  // ========================================================================
+  // REGENERATE IMAGE PROMPT + GENERATE ACTUAL IMAGE
+  // ========================================================================
+
+  if (regenerateImage) {
+    const newPrompt = await generateDetailedImagePrompt(
+      calendarItem,
+      strategy,
+      normalizedInput
+    );
+    updateData.imagePrompt = newPrompt;
+
+    const imageResult = await generateImage(calendarItem, normalizedInput);
+    const imageUrl = await uploadImageToStorage(imageResult, existingPost.campaignId);
+    updateData.imageUrl = imageUrl;
+    updateData.imageModel = imageResult.metadata.model;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return existingPost; // Nothing to do
+  }
 
   const updatedPost = await updatePost(postId, updateData);
-
   console.log(`[PostManagement] ✓ Post ${postId} regenerated`);
   return updatedPost;
+}
+
+/**
+ * Regenerate all DRAFT posts in a campaign using the existing strategy.
+ *
+ * DRAFT posts get new captions + image prompts.
+ * APPROVED / SCHEDULED / POSTED posts are never touched.
+ *
+ * @param campaignId - Campaign to regenerate
+ * @returns Count of regenerated and skipped posts
+ */
+export async function regenerateCampaignPosts(
+  campaignId: string
+): Promise<{ regenerated: number; skipped: number }> {
+  console.log(`[PostManagement] Regenerating all DRAFT posts for campaign ${campaignId}...`);
+
+  // Load campaign data + strategy once
+  const campaignData = await getCampaignFromDB(campaignId);
+  const savedStrategy = await getStrategyByCampaignId(campaignId);
+  const strategy = savedStrategy ?? {
+    content_pillars: ['General'],
+    tone: 'warm and engaging',
+    cta_style: 'inviting',
+    content_mix: { education: 30, trust: 50, promotion: 20 },
+  };
+
+  const normalizedInput: NormalizedInput = {
+    industry: campaignData.industry,
+    services: campaignData.services,
+    geography: campaignData.geography || 'Global',
+    posting_days: 0,
+    base_color: campaignData.base_color || '#000000',
+    accent_color: campaignData.accent_color || '#FFFFFF',
+    total_days: 1,
+    frequency_per_week: 1,
+    festival_enabled: false,
+    logo_url: '',
+    font_style: 'modern',
+    brand_stage: 'growing',
+    trust_weight: 50,
+    education_weight: 30,
+    promo_weight: 20,
+    platform: campaignData.platform ?? 'instagram',
+    timezone: campaignData.timezone ?? 'Asia/Kolkata',
+    scheduledTime: campaignData.scheduledTime ?? '10:00',
+  };
+
+  // Fetch only DRAFT posts — never touch approved/scheduled/posted ones
+  const draftPosts = await prisma.socialPost.findMany({
+    where: { campaignId, status: 'DRAFT' },
+    orderBy: { scheduledDate: 'asc' },
+  });
+
+  if (draftPosts.length === 0) {
+    console.log(`[PostManagement] No DRAFT posts to regenerate for campaign ${campaignId}`);
+    return { regenerated: 0, skipped: 0 };
+  }
+
+  console.log(`[PostManagement] Regenerating ${draftPosts.length} DRAFT posts...`);
+
+  let regenerated = 0;
+  let skipped = 0;
+
+  // Process in batches of 5 (same as generatePosts)
+  const batchSize = 5;
+  for (let i = 0; i < draftPosts.length; i += batchSize) {
+    const batch = draftPosts.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map(async (post) => {
+        try {
+          const calendarItem: CalendarItem = {
+            date: new Date(post.scheduledDate).toISOString().split('T')[0],
+            pillar: post.contentPillar || 'General',
+            topic: post.topic || post.contentPillar || 'General content',
+            content_type: post.contentType || 'photo',
+            is_festival: post.isFestival || false,
+            festival_name: post.festivalName || undefined,
+          };
+
+          const [newCaption, newPrompt] = await Promise.all([
+            generateCaption(calendarItem, strategy, normalizedInput),
+            generateDetailedImagePrompt(calendarItem, strategy, normalizedInput),
+          ]);
+
+          await updatePost(post.id, { caption: newCaption, imagePrompt: newPrompt });
+          regenerated++;
+        } catch (err) {
+          console.error(
+            `[PostManagement] Failed to regenerate post ${post.id}:`,
+            err instanceof Error ? err.message : String(err)
+          );
+          skipped++;
+        }
+      })
+    );
+    // Brief pause between batches
+    if (i + batchSize < draftPosts.length) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  console.log(
+    `[PostManagement] ✓ Campaign regeneration complete: ${regenerated} regenerated, ${skipped} skipped`
+  );
+  return { regenerated, skipped };
 }
 
 /**

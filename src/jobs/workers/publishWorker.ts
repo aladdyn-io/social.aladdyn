@@ -13,8 +13,71 @@ import { redisConnection } from '../redis';
 import { QUEUE_NAMES, PublishJobData } from '../queues';
 import { publishToInstagram, IgContentType } from '../../services/instagramPublisher';
 import { createLogger } from '../../utils/logger';
+import { createPublishLog } from '../../db/database';
 
 const logger = createLogger({ service: 'publish-worker' });
+
+/**
+ * Classifies a publish error into a user-friendly message and decides
+ * whether a retry is worth attempting.
+ *
+ * Non-retryable cases (retrying would produce the same error):
+ *   - Instagram token expired/invalid (Meta error code 190)
+ *   - Missing required media (image/video URL not set)
+ *   - Unsupported content type for the platform
+ *   - Missing platform credentials
+ */
+function classifyPublishError(
+  raw: string,
+  platform: string
+): { message: string; isNonRetryable: boolean } {
+  // Meta Graph API token errors — code 190 covers expired + revoked tokens
+  if (raw.includes('code=190') || (raw.includes('OAuthException') && raw.includes('token'))) {
+    return {
+      message:
+        'Instagram access token expired or revoked. Reconnect your Instagram account in the Social Scene settings to resume publishing.',
+      isNonRetryable: true,
+    };
+  }
+
+  // Instagram permission errors (code 200-series) — user revoked app permissions
+  if (raw.includes('code=200') || raw.includes('permissions')) {
+    return {
+      message:
+        'Instagram publishing permission denied. Re-authorise the Aladdyn app in your Instagram settings.',
+      isNonRetryable: true,
+    };
+  }
+
+  // Missing media — no retry will fix a missing imageUrl/videoUrl
+  if (raw.includes('imageUrl required') || raw.includes('videoUrl required')) {
+    return {
+      message: `${platform === 'instagram' ? 'Instagram' : 'LinkedIn'} post has no media attached. Generate or upload an image before publishing.`,
+      isNonRetryable: true,
+    };
+  }
+
+  // Missing credentials — no retry will fix a missing token/userId
+  if (raw.includes('no Instagram credentials') || raw.includes('no funnelId')) {
+    return {
+      message: raw,
+      isNonRetryable: true,
+    };
+  }
+
+  // Unsupported content type
+  if (raw.includes('not supported') || raw.includes('Unknown contentType')) {
+    return { message: raw, isNonRetryable: true };
+  }
+
+  // LinkedIn service returned a 4xx — likely a data problem, not a transient error
+  if (raw.includes('LinkedIn service error (4')) {
+    return { message: raw, isNonRetryable: true };
+  }
+
+  // Everything else is treated as transient (network blip, rate limit, API 5xx)
+  return { message: raw, isNonRetryable: false };
+}
 
 async function processPublish(job: Job<PublishJobData>): Promise<void> {
   const { postId, campaignId, platform } = job.data;
@@ -115,21 +178,55 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
       },
     });
 
+    await createPublishLog({
+      postId,
+      campaignId,
+      platform,
+      attempt: job.attemptsMade + 1,
+      status: 'succeeded',
+      jobId: job.id ?? undefined,
+    });
+
     logger.info('Post published', { postId, platform, platformPostId });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('Publish failed', { postId, platform, error: message });
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    logger.error('Publish failed', { postId, platform, error: rawMessage });
+
+    // Classify the failure so the user sees an actionable error message
+    const { message, isNonRetryable } = classifyPublishError(rawMessage, platform);
+
+    // Non-retryable failures (expired token, unsupported media, etc.) skip retries
+    // and go straight to FAILED — retrying would produce the same error.
+    const isFinalAttempt =
+      isNonRetryable || job.attemptsMade >= (job.opts.attempts ?? 1) - 1;
 
     await prisma.socialPost.update({
       where: { id: postId },
       data: {
-        status: 'FAILED',
+        status: isFinalAttempt ? 'FAILED' : 'PUBLISHING',
         publishError: message,
         publishAttempts: { increment: 1 },
       },
     });
 
-    throw err; // Let BullMQ handle retries
+    await createPublishLog({
+      postId,
+      campaignId,
+      platform,
+      attempt: job.attemptsMade + 1,
+      status: 'failed',
+      error: message,
+      jobId: job.id ?? undefined,
+    });
+
+    if (isNonRetryable) {
+      // Swallow the error so BullMQ marks the job as completed (not failed/retried).
+      // The post is already in FAILED status — no retry will succeed.
+      logger.warn('Non-retryable error — skipping BullMQ retry', { postId, reason: message });
+      return;
+    }
+
+    throw err; // Let BullMQ handle retries for transient errors
   }
 }
 

@@ -143,6 +143,7 @@ export enum ApiErrorCode {
   
   // Not found errors (404)
   CAMPAIGN_NOT_FOUND = 'CAMPAIGN_NOT_FOUND',
+  POST_NOT_FOUND = 'POST_NOT_FOUND',
   JOB_NOT_FOUND = 'JOB_NOT_FOUND',
   
   // Processing errors (500)

@@ -85,6 +85,7 @@ enum CampaignStatus {
   ACTIVE
   PAUSED
   COMPLETED
+  FAILED
 
   @@schema("social")
 }
@@ -152,12 +153,36 @@ model SocialPost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign SocialCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign    SocialCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  publishLogs PostPublishLog[]
 
   @@index([campaignId, scheduledDate])
   @@index([status, scheduledDate])
   @@index([platform, status])
   @@map("social_posts")
+  @@schema("social")
+}
+
+// ── Publish Attempt Log ───────────────────────────────────────────────────────
+// Full history of every publish attempt per post (success + failure).
+// Replaces the single publishError field as the audit trail.
+model PostPublishLog {
+  id         String  @id @default(uuid())
+  postId     String
+  campaignId String
+  platform   String
+  attempt    Int
+  status     String  // "succeeded" | "failed"
+  error      String? @db.Text
+  jobId      String? // BullMQ job ID
+
+  post SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@index([campaignId, createdAt])
+  @@map("post_publish_logs")
   @@schema("social")
 }
 

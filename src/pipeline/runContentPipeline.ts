@@ -126,23 +126,60 @@ export async function runContentPipeline(
     }
 
     // ── Step 6: Generate Posts (captions + image prompts) ────────────────────
-    const posts = await generatePosts(calendar, normalizedInput, strategy, websiteContext);
+    // Determine all platforms — multi-platform campaigns generate a post set per platform
+    const campaignPlatforms = enrichedInput.platforms;
+    const platformsToGenerate =
+      campaignPlatforms && campaignPlatforms.length > 1
+        ? campaignPlatforms
+        : [normalizedInput.platform];
 
-    // ── Step 7: Save Posts ───────────────────────────────────────────────────
-    if (campaignId) {
-      try {
-        const savedIds = await savePostsToDB(
-          campaignId,
-          posts,
-          normalizedInput.platform,
-          normalizedInput.scheduledTime,
-          normalizedInput.timezone
-        );
-        logger.info('Posts saved', { count: String(savedIds.length), platform: normalizedInput.platform });
-      } catch (err) {
-        logger.error('Failed to save posts (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
+    const postingTimes = (enrichedInput as any).postingTimes as
+      | Record<string, string[]>
+      | null
+      | undefined;
+
+    let allPosts = [] as typeof posts;
+    // Declare posts outside the loop so TypeScript is happy
+    let posts: Awaited<ReturnType<typeof generatePosts>> = [];
+
+    for (const platform of platformsToGenerate) {
+      logger.info('Generating posts for platform', { platform });
+      const platformInput = { ...normalizedInput, platform };
+      const platformPosts = await generatePosts(
+        calendar,
+        platformInput,
+        strategy,
+        websiteContext
+      );
+
+      // ── Step 7: Save Posts ─────────────────────────────────────────────────
+      if (campaignId) {
+        try {
+          const platformTime =
+            postingTimes?.[platform]?.[0] ?? normalizedInput.scheduledTime;
+          const savedIds = await savePostsToDB(
+            campaignId,
+            platformPosts,
+            platform,
+            platformTime,
+            normalizedInput.timezone
+          );
+          logger.info('Posts saved', {
+            count: String(savedIds.length),
+            platform,
+          });
+        } catch (err) {
+          logger.error('Failed to save posts (non-fatal)', {
+            error: err instanceof Error ? err.message : String(err),
+            platform,
+          });
+        }
       }
+
+      allPosts = allPosts.concat(platformPosts);
     }
+
+    posts = allPosts;
 
     return { strategy, calendar, posts };
   } catch (error) {

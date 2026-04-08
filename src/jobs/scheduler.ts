@@ -13,6 +13,7 @@
 import { publishQueue } from './queues';
 import prisma from '../lib/prisma';
 import { createLogger } from '../utils/logger';
+import { getStuckPosts } from '../db/database';
 
 const logger = createLogger({ service: 'scheduler' });
 
@@ -59,6 +60,50 @@ export async function scheduleUpcomingPosts(): Promise<void> {
   }
 }
 
+// Posts stuck in PUBLISHING longer than this are likely orphaned (worker died mid-job)
+const STUCK_PUBLISHING_THRESHOLD_MIN = 15;
+// Posts stuck in SCHEDULED longer than this were never picked up by the worker
+const STUCK_SCHEDULED_THRESHOLD_MIN = 30;
+
+/**
+ * Finds posts that have been stuck in PUBLISHING or SCHEDULED for too long
+ * and resets them to APPROVED so the scheduler re-enqueues them next tick.
+ *
+ * PUBLISHING > 15 min  — worker likely crashed mid-job
+ * SCHEDULED  > 30 min  — BullMQ job was dropped or Redis restarted
+ */
+async function sweepStuckPosts(): Promise<void> {
+  const stuckPublishing = await getStuckPosts(STUCK_PUBLISHING_THRESHOLD_MIN).then((rows) =>
+    rows.filter((p) => p.status === 'PUBLISHING')
+  );
+  const stuckScheduled = await getStuckPosts(STUCK_SCHEDULED_THRESHOLD_MIN).then((rows) =>
+    rows.filter((p) => p.status === 'SCHEDULED')
+  );
+
+  const allStuck = [...stuckPublishing, ...stuckScheduled];
+  if (allStuck.length === 0) return;
+
+  logger.warn('Resetting stuck posts to APPROVED', { count: String(allStuck.length) });
+
+  for (const post of allStuck) {
+    const reason =
+      post.status === 'PUBLISHING'
+        ? `Reset: stuck in PUBLISHING > ${STUCK_PUBLISHING_THRESHOLD_MIN}m`
+        : `Reset: stuck in SCHEDULED > ${STUCK_SCHEDULED_THRESHOLD_MIN}m`;
+
+    await prisma.socialPost
+      .update({ where: { id: post.id }, data: { status: 'APPROVED', publishError: reason } })
+      .catch((err) =>
+        logger.error('Failed to reset stuck post', {
+          postId: post.id,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      );
+
+    logger.warn('Reset stuck post', { postId: post.id, reason });
+  }
+}
+
 /** Start the scheduler poll loop (called once on server boot) */
 export function startScheduler(intervalMs = 60_000): NodeJS.Timeout {
   logger.info('Starting poll loop', { intervalMs: String(intervalMs) });
@@ -67,7 +112,16 @@ export function startScheduler(intervalMs = 60_000): NodeJS.Timeout {
     try {
       await scheduleUpcomingPosts();
     } catch (err) {
-      logger.error('Poll error', { error: err instanceof Error ? err.message : String(err) });
+      logger.error('scheduleUpcomingPosts error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    try {
+      await sweepStuckPosts();
+    } catch (err) {
+      logger.error('sweepStuckPosts error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 
