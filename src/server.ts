@@ -201,16 +201,34 @@ app.post(
 
     try {
       const userId = (req as any).user?.id || 'anonymous';
-      const startDate = new Date();
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + (input.total_days || 30));
+
+      // Allow caller to supply explicit start/end dates and a campaign name
+      const { startDate: rawStart, endDate: rawEnd, name: campaignName } = req.body as {
+        startDate?: string;
+        endDate?: string;
+        name?: string;
+      };
+      const startDate = rawStart ? new Date(rawStart) : new Date();
+      let endDate: Date;
+      if (rawEnd) {
+        endDate = new Date(rawEnd);
+      } else {
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + (input.total_days || 30));
+      }
+      // Recalculate total_days from actual dates if both supplied
+      if (rawStart && rawEnd) {
+        input.total_days = Math.round(
+          (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+      }
 
       // Create SocialCampaign in Prisma (social.* schema)
       const campaign = await prisma.socialCampaign.create({
         data: {
           funnelId: funnelId || 'direct',
           userId,
-          name: `${input.industry || 'Social'} Campaign`,
+          name: campaignName || `${input.industry || 'Social'} Campaign`,
           startDate,
           endDate,
           timezone: 'Asia/Kolkata',
@@ -955,6 +973,37 @@ app.post(
 );
 
 /**
+ * Delete a campaign and all its posts
+ * DELETE /api/v1/campaigns/:campaignId
+ */
+app.delete(
+  '/api/v1/campaigns/:campaignId',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
+
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true, status: true },
+    });
+
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
+
+    // Cascade delete — Prisma handles posts + strategy via onDelete: Cascade
+    await prisma.socialCampaign.delete({ where: { id: campaignId } });
+
+    res.json({
+      success: true,
+      data: { campaignId, message: 'Campaign deleted' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
  * Approve a post (moves it to APPROVED — scheduler will enqueue it)
  * POST /api/v1/posts/:postId/approve
  */
@@ -989,6 +1038,47 @@ app.post(
     res.json({
       success: true,
       data: { post, message: 'Post approved — will be published at scheduled time' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
+ * Reject a post (moves it to REJECTED — will not be published)
+ * POST /api/v1/posts/:postId/reject
+ */
+app.post(
+  '/api/v1/posts/:postId/reject',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postId } = req.params;
+
+    const existing = await prisma.socialPost.findUnique({
+      where: { id: postId },
+      select: { status: true },
+    });
+
+    if (!existing) {
+      throw new AppError(ApiErrorCode.INVALID_INPUT, 'Post not found', 404);
+    }
+
+    const rejectableStatuses = ['DRAFT', 'APPROVED'];
+    if (!rejectableStatuses.includes(existing.status)) {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        `Cannot reject post in '${existing.status}' status`,
+        400
+      );
+    }
+
+    const post = await prisma.socialPost.update({
+      where: { id: postId },
+      data: { status: 'REJECTED' },
+    });
+
+    res.json({
+      success: true,
+      data: { post, message: 'Post rejected — will not be published' },
       meta: { timestamp: new Date().toISOString() },
     });
   })
@@ -1407,10 +1497,12 @@ function startServer() {
     try {
       const { startPublishWorker } = await import('./jobs/workers/publishWorker');
       const { startImageGenWorker } = await import('./jobs/workers/imageGenWorker');
+      const { startEngagementPollWorker } = await import('./jobs/workers/engagementPoller');
       const { startScheduler } = await import('./jobs/scheduler');
 
       startPublishWorker();
       startImageGenWorker();
+      startEngagementPollWorker();
       startScheduler();
 
       console.log('[Server] BullMQ workers + scheduler running');

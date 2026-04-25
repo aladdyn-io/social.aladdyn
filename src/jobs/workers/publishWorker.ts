@@ -10,7 +10,7 @@
 import { Worker, Job } from 'bullmq';
 import prisma from '../../lib/prisma';
 import { redisConnection } from '../redis';
-import { QUEUE_NAMES, PublishJobData } from '../queues';
+import { QUEUE_NAMES, PublishJobData, engagementPollQueue } from '../queues';
 import { publishToInstagram, IgContentType } from '../../services/instagramPublisher';
 import { createLogger } from '../../utils/logger';
 import { createPublishLog } from '../../db/database';
@@ -95,33 +95,44 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
       where: { id: postId },
       include: {
         campaign: {
-          select: { igUserId: true, accessToken: true, funnelId: true },
+          select: { igUserId: true, accessToken: true, funnelId: true, userId: true },
         },
       },
     });
 
     let platformPostId: string;
+    let fallbackNote: string | null = null;
 
     if (platform === 'instagram') {
-      const { igUserId, accessToken } = post.campaign;
+      const { igUserId, accessToken, funnelId } = post.campaign;
 
       if (!igUserId || !accessToken) {
-        throw new Error(
-          `Campaign ${campaignId} has no Instagram credentials. ` +
-            'Connect an Instagram account before publishing.'
-        );
+        // No Instagram credentials — fall back to LinkedIn if the campaign has a funnelId
+        if (funnelId) {
+          logger.warn(
+            'No Instagram credentials — falling back to LinkedIn publish',
+            { postId, campaignId }
+          );
+          platformPostId = await publishViaLinkedIn({ post, funnelId, campaignId });
+          fallbackNote = 'Published to LinkedIn (Instagram not connected)';
+        } else {
+          throw new Error(
+            `Campaign ${campaignId} has no Instagram credentials. ` +
+              'Connect an Instagram account before publishing.'
+          );
+        }
+      } else {
+        const result = await publishToInstagram({
+          igUserId,
+          accessToken,
+          contentType: post.contentType as IgContentType,
+          caption: buildCaption(post.caption, post.hashtags),
+          imageUrl: post.imageUrl ?? undefined,
+          shareToFeed: true,
+        });
+
+        platformPostId = result.mediaId;
       }
-
-      const result = await publishToInstagram({
-        igUserId,
-        accessToken,
-        contentType: post.contentType as IgContentType,
-        caption: buildCaption(post.caption, post.hashtags),
-        imageUrl: post.imageUrl ?? undefined,
-        shareToFeed: true,
-      });
-
-      platformPostId = result.mediaId;
     } else if (platform === 'linkedin') {
       const { funnelId } = post.campaign;
 
@@ -131,38 +142,7 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
         );
       }
 
-      const linkedinServiceUrl =
-        process.env.LINKEDIN_SERVICE_URL || 'http://localhost:4002';
-      const internalSecret =
-        process.env.INTERNAL_API_SECRET || 'aladdyn-internal-secret';
-
-      const caption = buildCaption(post.caption, post.hashtags);
-      const scheduledAt = `${post.scheduledDate.toISOString().split('T')[0]}T${post.scheduledTime}:00`;
-
-      const liRes = await fetch(
-        `${linkedinServiceUrl}/internal/posts/create-from-social`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-internal-secret': internalSecret,
-          },
-          body: JSON.stringify({
-            funnelId,
-            text: caption,
-            imageUrls: post.imageUrl ? [post.imageUrl] : [],
-            scheduledAt,
-          }),
-        }
-      );
-
-      if (!liRes.ok) {
-        const errText = await liRes.text();
-        throw new Error(`LinkedIn service error (${liRes.status}): ${errText}`);
-      }
-
-      const liData = (await liRes.json()) as { data: { postId: string } };
-      platformPostId = liData.data.postId;
+      platformPostId = await publishViaLinkedIn({ post, funnelId, campaignId });
     } else {
       throw new Error(`Platform "${platform}" is not supported`);
     }
@@ -174,7 +154,7 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
         publishedAt: new Date(),
         platformPostId,
         publishAttempts: { increment: 1 },
-        publishError: null,
+        publishError: fallbackNote, // null for normal publish; note for LinkedIn fallback
       },
     });
 
@@ -188,6 +168,25 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
     });
 
     logger.info('Post published', { postId, platform, platformPostId });
+
+    // Enqueue engagement poll 30 minutes after publish (Instagram only for now)
+    if (platform === 'instagram' && post.campaign.funnelId && post.campaign.userId) {
+      await engagementPollQueue.add(
+        `engagement-poll-${postId}`,
+        {
+          postId,
+          platformPostId,
+          platform,
+          funnelId: post.campaign.funnelId,
+          userId: post.campaign.userId,
+        },
+        {
+          delay: 30 * 60 * 1000, // 30 minutes
+          jobId: `engagement-poll-${postId}`,
+        }
+      );
+      logger.info('Engagement poll scheduled in 30 min', { postId });
+    }
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);
     logger.error('Publish failed', { postId, platform, error: rawMessage });
@@ -228,6 +227,42 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
 
     throw err; // Let BullMQ handle retries for transient errors
   }
+}
+
+/** Publishes a post to linkedin.aladdyn via the internal API. Returns the platformPostId. */
+async function publishViaLinkedIn(params: {
+  post: { caption: string | null; hashtags: string[]; imageUrl: string | null; scheduledDate: Date; scheduledTime: string };
+  funnelId: string;
+  campaignId: string;
+}): Promise<string> {
+  const { post, funnelId } = params;
+  const linkedinServiceUrl = process.env.LINKEDIN_SERVICE_URL || 'http://localhost:4002';
+  const internalSecret = process.env.INTERNAL_API_SECRET || 'aladdyn-internal-secret';
+
+  const caption = buildCaption(post.caption, post.hashtags);
+  const scheduledAt = `${post.scheduledDate.toISOString().split('T')[0]}T${post.scheduledTime}:00`;
+
+  const liRes = await fetch(`${linkedinServiceUrl}/internal/posts/create-from-social`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-secret': internalSecret,
+    },
+    body: JSON.stringify({
+      funnelId,
+      text: caption,
+      imageUrls: post.imageUrl ? [post.imageUrl] : [],
+      scheduledAt,
+    }),
+  });
+
+  if (!liRes.ok) {
+    const errText = await liRes.text();
+    throw new Error(`LinkedIn service error (${liRes.status}): ${errText}`);
+  }
+
+  const liData = (await liRes.json()) as { data: { postId: string } };
+  return liData.data.postId;
 }
 
 /** Merges caption text + hashtags into the final IG caption string */

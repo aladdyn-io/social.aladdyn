@@ -23,6 +23,34 @@ export async function scheduleUpcomingPosts(): Promise<void> {
   const now = new Date();
   const lookahead = new Date(now.getTime() + LOOKAHEAD_MINUTES * 60 * 1_000);
 
+  // Auto-approve DRAFT posts that have reached (or passed) their scheduled time.
+  // This implements "if not approved by posting date, post automatically".
+  const draftOverdue = await prisma.socialPost.findMany({
+    where: {
+      status: 'DRAFT',
+      scheduledDate: { lte: lookahead },
+      NOT: { contentType: 'written' },
+    },
+    take: 50,
+  });
+
+  if (draftOverdue.length > 0) {
+    logger.info('Auto-approving overdue DRAFT posts', { count: String(draftOverdue.length) });
+    for (const post of draftOverdue) {
+      await prisma.socialPost
+        .update({
+          where: { id: post.id },
+          data: { status: 'APPROVED', approvedAt: new Date() },
+        })
+        .catch((err) =>
+          logger.error('Failed to auto-approve post', {
+            postId: post.id,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+    }
+  }
+
   // Find APPROVED posts whose scheduled time is within the lookahead window
   // Exclude 'written' contentType — Instagram has no text-only post type
   const posts = await prisma.socialPost.findMany({
@@ -104,11 +132,38 @@ async function sweepStuckPosts(): Promise<void> {
   }
 }
 
+/**
+ * Marks campaigns as COMPLETED when their endDate has passed.
+ * Runs every tick — lightweight query with an index on (status, endDate).
+ */
+async function autoExpireCampaigns(): Promise<void> {
+  const now = new Date();
+
+  const result = await prisma.socialCampaign.updateMany({
+    where: {
+      status: { in: ['ACTIVE', 'READY', 'PAUSED'] },
+      endDate: { lt: now },
+    },
+    data: { status: 'COMPLETED' },
+  });
+
+  if (result.count > 0) {
+    logger.info('Auto-expired campaigns', { count: String(result.count) });
+  }
+}
+
 /** Start the scheduler poll loop (called once on server boot) */
 export function startScheduler(intervalMs = 60_000): NodeJS.Timeout {
   logger.info('Starting poll loop', { intervalMs: String(intervalMs) });
 
   const tick = async () => {
+    try {
+      await autoExpireCampaigns();
+    } catch (err) {
+      logger.error('autoExpireCampaigns error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     try {
       await scheduleUpcomingPosts();
     } catch (err) {

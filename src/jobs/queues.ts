@@ -13,6 +13,7 @@ import { redisConnection } from './redis';
 export const QUEUE_NAMES = {
   PUBLISH: 'social-publish',
   IMAGE_GEN: 'social-image-gen',
+  ENGAGEMENT_POLL: 'social-engagement-poll',
 } as const;
 
 // ── Queue instances ──────────────────────────────────────────────────────────
@@ -39,6 +40,17 @@ export const imageGenQueue = new Queue(QUEUE_NAMES.IMAGE_GEN, {
   },
 });
 
+/** Engagement poll queue — polls Meta/LinkedIn APIs for post engagement data */
+export const engagementPollQueue = new Queue(QUEUE_NAMES.ENGAGEMENT_POLL, {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { count: 500 },
+    removeOnFail: { count: 200 },
+  },
+});
+
 // ── Job data types ───────────────────────────────────────────────────────────
 
 export interface PublishJobData {
@@ -49,4 +61,12 @@ export interface PublishJobData {
 
 export interface ImageGenJobData {
   postId: string;
+}
+
+export interface EngagementPollJobData {
+  postId: string;
+  platformPostId: string;
+  platform: string;
+  funnelId: string;
+  userId: string;
 }

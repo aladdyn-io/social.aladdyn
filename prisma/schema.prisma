@@ -153,8 +153,9 @@ model SocialPost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign    SocialCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  publishLogs PostPublishLog[]
+  campaign     SocialCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  publishLogs  PostPublishLog[]
+  engagements  SocialEngagement[]
 
   @@index([campaignId, scheduledDate])
   @@index([status, scheduledDate])
@@ -194,6 +195,27 @@ enum PostStatus {
   POSTED
   FAILED
   DELETED
+  REJECTED
 
+  @@schema("social")
+}
+
+// ── Post Engagement Tracking ──────────────────────────────────────────────────
+model SocialEngagement {
+  id             String    @id @default(uuid())
+  postId         String
+  post           SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform       String    // "instagram" | "linkedin"
+  externalUserId String
+  displayName    String?
+  engagementType String    // "LIKE" | "COMMENT"
+  content        String?   @db.Text // comment text
+  engagedAt      DateTime  @default(now())
+  leadSignalSentAt DateTime? // timestamp when emitted to server.aladdyn
+
+  @@unique([postId, externalUserId, engagementType])
+  @@index([postId])
+  @@index([leadSignalSentAt])
+  @@map("social_engagements")
   @@schema("social")
 }
