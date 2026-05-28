@@ -270,7 +270,7 @@ export async function publishToInstagram(
     }
 
     case 'carousel': {
-      const items = carouselItems ?? (imageUrl ? [imageUrl] : []);
+      const items = carouselItems ?? (imageUrl ? (imageUrl.includes(',') ? imageUrl.split(',') : [imageUrl]) : []);
       if (items.length < 2 || items.length > 10) {
         throw new Error(
           `[Instagram] Carousel requires 2–10 items, got ${items.length}`

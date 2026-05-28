@@ -18,6 +18,10 @@ import { CalendarItem, PostItem, Strategy } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { generateCaption } from './generateCaption';
 import { generateDetailedImagePrompt } from './generateImagePrompt';
+import { generateDetailedVideoPrompt } from './generateVideoPrompt';
+
+/** Content types that produce videos instead of static images */
+const VIDEO_CONTENT_TYPES = new Set(['reel', 'story']);
 
 /**
  * Generates all posts for the calendar with PARALLEL caption + prompt generation
@@ -68,13 +72,77 @@ export async function generatePosts(
         try {
           console.log(`  [${globalIndex + 1}/${calendar.length}] Processing ${entry.date}...`);
 
-          // PARALLEL: Generate caption AND prompt simultaneously
-          const [caption, detailedPrompt] = await Promise.all([
+          // Compute the deterministic visual contentType for this slot matching database's savePostsToDB pool
+          const platform = (entry.platform || input.platform || 'instagram').toLowerCase();
+          const rawMix = input.contentMix || { photo: 4, reel: 2, carousel: 2, story: 1, written: 2 };
+          
+          const platformCaps: Record<string, string[]> = {
+            instagram: ['photo', 'reel', 'carousel', 'story'],
+            linkedin: ['photo', 'carousel', 'written'],
+            whatsapp: ['photo', 'written']
+          };
+
+          const allowedTypes = platformCaps[platform] || ['photo'];
+          
+          const rawPool: string[] = [];
+          for (const [type, weight] of Object.entries(rawMix)) {
+            if (allowedTypes.includes(type)) {
+              const count = typeof weight === 'number' ? weight : 1;
+              for (let w = 0; w < count; w++) {
+                rawPool.push(type);
+              }
+            }
+          }
+
+          const groups: Record<string, string[]> = {};
+          for (const type of rawPool) {
+            if (!groups[type]) groups[type] = [];
+            groups[type].push(type);
+          }
+          
+          const pool: string[] = [];
+          const keys = Object.keys(groups);
+          let hasMore = true;
+          while (hasMore) {
+            hasMore = false;
+            for (const key of keys) {
+              if (groups[key].length > 0) {
+                pool.push(groups[key].shift()!);
+                hasMore = true;
+              }
+            }
+          }
+
+          if (pool.length === 0) {
+            pool.push(...allowedTypes);
+          }
+
+          let resolvedContentType = 'photo';
+          const entryType = (entry.content_type || '').toLowerCase();
+          const genericTypes = new Set(['education', 'trust', 'promotion', 'image']);
+          
+          if (entryType && !genericTypes.has(entryType)) {
+            resolvedContentType = entryType;
+          } else {
+            resolvedContentType = pool[globalIndex % pool.length] || 'photo';
+          }
+
+          if (resolvedContentType === 'image') {
+            resolvedContentType = 'photo';
+          }
+
+          // PARALLEL: Generate caption AND prompt(s) simultaneously
+          const isVideo = VIDEO_CONTENT_TYPES.has(resolvedContentType);
+
+          const [caption, detailedPrompt, videoPrompt] = await Promise.all([
             generateCaption(entry, strategy, input, websiteContext),
-            generateDetailedImagePrompt(entry, strategy, input)
+            generateDetailedImagePrompt(entry, strategy, input),  // always — used as fallback for video slots too
+            isVideo
+              ? generateDetailedVideoPrompt(entry, strategy, input)
+              : Promise.resolve(undefined as string | undefined),
           ]);
 
-          console.log(`  ✓ [${globalIndex + 1}/${calendar.length}] Caption + prompt generated`);
+          console.log(`  ✓ [${globalIndex + 1}/${calendar.length}] Caption + prompt${isVideo ? ' + video prompt' : ''} generated`);
 
           const post: PostItem = {
             entryId: `${entry.date}-${entry.pillar}`,
@@ -83,7 +151,10 @@ export async function generatePosts(
             hashtags: generateHashtags(entry, input),
             callToAction: generateCTA(entry, strategy),
             detailedImagePrompt: detailedPrompt,
+            videoPrompt: videoPrompt ?? undefined,
             imageUrl: null, // No image yet - generated on-demand
+            contentType: resolvedContentType,
+            mediaType: isVideo ? 'video' : 'image',
             metadata: {
               contentPillar: entry.is_festival ? undefined : entry.pillar,
               festival: entry.is_festival ? entry.festival_name : undefined,

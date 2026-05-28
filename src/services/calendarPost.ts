@@ -11,6 +11,7 @@ import { ManualPostData } from '../types/calendar';
 import { NormalizedInput } from './normalizeInput';
 import { generateCaption } from './generateCaption';
 import { generateDetailedImagePrompt } from './generateImagePrompt';
+import { generateDetailedVideoPrompt } from './generateVideoPrompt';
 import {
   getCampaignFromDB,
   getStrategyByCampaignId,
@@ -19,6 +20,27 @@ import {
 import prisma from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { ApiErrorCode } from '../types/api';
+
+/** Generate relevant hashtags for a post (mirrors generatePosts.ts logic) */
+function generateHashtags(entry: CalendarItem, input: NormalizedInput): string[] {
+  const hashtags: string[] = [];
+  const industryTag = input.industry.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+  if (industryTag) hashtags.push(`#${industryTag}`);
+  input.services.slice(0, 2).forEach(service => {
+    const tag = service.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (tag) hashtags.push(`#${tag}`);
+  });
+  if (entry.is_festival && entry.festival_name) {
+    const tag = entry.festival_name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (tag) hashtags.push(`#${tag}`);
+  }
+  if (input.geography !== 'Global') {
+    const tag = input.geography.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    if (tag) hashtags.push(`#${tag}`);
+  }
+  hashtags.push('#SocialMedia');
+  return hashtags.slice(0, 7);
+}
 
 /**
  * Generate an AI-authored post for a specific calendar date.
@@ -34,7 +56,7 @@ import { ApiErrorCode } from '../types/api';
 export async function generateAiPostForDate(
   campaignId: string,
   date: string,
-  opts: { pillar?: string; topic?: string } = {}
+  opts: { pillar?: string; topic?: string; platform?: string; contentType?: string; scheduledTime?: string } = {}
 ): Promise<any> {
   console.log(`[CalendarPost] Generating AI post for campaign ${campaignId} on ${date}`);
 
@@ -58,8 +80,9 @@ export async function generateAiPostForDate(
     date,
     pillar,
     topic,
-    content_type: 'photo',
+    content_type: opts.contentType ?? 'photo',
     is_festival: false,
+    platform: opts.platform ?? campaignData.platform ?? 'instagram',
   };
 
   const normalizedInput: NormalizedInput = {
@@ -78,9 +101,9 @@ export async function generateAiPostForDate(
     trust_weight: 50,
     education_weight: 30,
     promo_weight: 20,
-    platform: campaignData.platform ?? 'instagram',
+    platform: opts.platform ?? campaignData.platform ?? 'instagram',
     timezone: campaignData.timezone ?? 'Asia/Kolkata',
-    scheduledTime: campaignData.scheduledTime ?? '10:00',
+    scheduledTime: opts.scheduledTime ?? campaignData.scheduledTime ?? '10:00',
   };
 
   // Generate caption and image prompt in parallel
@@ -91,12 +114,12 @@ export async function generateAiPostForDate(
 
   const post = await createManualPost(campaignId, {
     scheduledDate: new Date(date),
-    scheduledTime: normalizedInput.scheduledTime,
-    platform: normalizedInput.platform,
-    contentType: 'photo',
+    scheduledTime: opts.scheduledTime ?? normalizedInput.scheduledTime,
+    platform: opts.platform ?? normalizedInput.platform,
+    contentType: opts.contentType ?? 'photo',
     topic,
     caption,
-    hashtags: [],
+    hashtags: generateHashtags(calendarItem, normalizedInput),
     contentPillar: pillar,
     imageUrl: undefined,
   } as ManualPostData);
@@ -106,6 +129,16 @@ export async function generateAiPostForDate(
     where: { id: post.id },
     data: { imagePrompt },
   });
+
+  // Debit 1 token for manual AI post creation
+  const { debitToken } = await import('./tokenService');
+  try {
+    await debitToken(campaignId, updated.id);
+  } catch (tokenErr) {
+    // Cleanup: delete the created post record since the debit failed
+    await prisma.socialPost.delete({ where: { id: updated.id } }).catch(() => null);
+    throw tokenErr;
+  }
 
   console.log(`[CalendarPost] ✓ AI post created: ${updated.id}`);
   return updated;
@@ -141,6 +174,16 @@ export async function createManualPostForDate(
     ...data,
     scheduledDate: new Date(date),
   });
+
+  // Debit 1 token for manual post creation
+  const { debitToken } = await import('./tokenService');
+  try {
+    await debitToken(campaignId, post.id);
+  } catch (tokenErr) {
+    // Cleanup: delete the created post record since the debit failed
+    await prisma.socialPost.delete({ where: { id: post.id } }).catch(() => null);
+    throw tokenErr;
+  }
 
   console.log(`[CalendarPost] ✓ Manual post created: ${post.id}`);
   return post;

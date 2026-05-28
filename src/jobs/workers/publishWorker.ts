@@ -12,6 +12,7 @@ import prisma from '../../lib/prisma';
 import { redisConnection } from '../redis';
 import { QUEUE_NAMES, PublishJobData, engagementPollQueue } from '../queues';
 import { publishToInstagram, IgContentType } from '../../services/instagramPublisher';
+import { publishToLinkedIn as publishDirectToLinkedIn } from '../../services/linkedinPublisher';
 import { createLogger } from '../../utils/logger';
 import { createPublishLog } from '../../db/database';
 
@@ -135,14 +136,25 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
       }
     } else if (platform === 'linkedin') {
       const { funnelId } = post.campaign;
+      const directToken = process.env.LINKEDIN_ACCESS_TOKEN;
+      const directUrn = process.env.LINKEDIN_MEMBER_URN;
 
-      if (!funnelId) {
-        throw new Error(
-          `Campaign ${campaignId} has no funnelId — cannot route to LinkedIn service`
-        );
+      if (directToken && directUrn) {
+        logger.info('Using direct LinkedIn publishing via environment credentials');
+        platformPostId = await publishDirectToLinkedIn({
+          accessToken: directToken,
+          memberUrn: directUrn,
+          text: buildCaption(post.caption, post.hashtags),
+          imageUrl: post.imageUrl ?? undefined,
+        });
+      } else {
+        if (!funnelId) {
+          throw new Error(
+            `Campaign ${campaignId} has no funnelId — cannot route to LinkedIn service`
+          );
+        }
+        platformPostId = await publishViaLinkedIn({ post, funnelId, campaignId });
       }
-
-      platformPostId = await publishViaLinkedIn({ post, funnelId, campaignId });
     } else {
       throw new Error(`Platform "${platform}" is not supported`);
     }
@@ -242,6 +254,10 @@ async function publishViaLinkedIn(params: {
   const caption = buildCaption(post.caption, post.hashtags);
   const scheduledAt = `${post.scheduledDate.toISOString().split('T')[0]}T${post.scheduledTime}:00`;
 
+  const imageUrls = post.imageUrl
+    ? (post.imageUrl.includes(',') ? post.imageUrl.split(',') : [post.imageUrl])
+    : [];
+
   const liRes = await fetch(`${linkedinServiceUrl}/internal/posts/create-from-social`, {
     method: 'POST',
     headers: {
@@ -251,7 +267,7 @@ async function publishViaLinkedIn(params: {
     body: JSON.stringify({
       funnelId,
       text: caption,
-      imageUrls: post.imageUrl ? [post.imageUrl] : [],
+      imageUrls,
       scheduledAt,
     }),
   });
@@ -278,7 +294,7 @@ function buildCaption(caption: string | null, hashtags: string[]): string {
 export function startPublishWorker(): Worker<PublishJobData> {
   const worker = new Worker<PublishJobData>(QUEUE_NAMES.PUBLISH, processPublish, {
     connection: redisConnection,
-    concurrency: 3,
+    concurrency: 1,
   });
 
   worker.on('completed', (job) => {
@@ -289,6 +305,6 @@ export function startPublishWorker(): Worker<PublishJobData> {
     logger.error('Job failed', { jobId: job?.id ?? '', error: err.message });
   });
 
-  logger.info('Started', { concurrency: '3' });
+  logger.info('Started', { concurrency: '1' });
   return worker;
 }

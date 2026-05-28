@@ -13,7 +13,8 @@ import { NormalizedInput } from './normalizeInput';
 import { generateCaption } from './generateCaption';
 import { generateDetailedImagePrompt } from './generateImagePrompt';
 import { generateImage } from './imageGenerator';
-import { uploadImageToStorage } from './objectStorage';
+import { uploadImageToStorage, deleteFolderFromStorage } from './objectStorage';
+import { generatePostImage } from './onDemandImageGeneration';
 import {
   getPostById,
   updatePost,
@@ -40,6 +41,8 @@ export async function editPost(
     imagePrompt?: string;
     hashtags?: string[];
     callToAction?: string;
+    scheduledDate?: string | Date;
+    scheduledTime?: string;
   }
 ): Promise<any> {
   console.log(`[PostManagement] Editing post ${postId}...`);
@@ -70,6 +73,12 @@ export async function editPost(
   if (updates.callToAction !== undefined) {
     updateData.call_to_action = updates.callToAction;
   }
+  if (updates.scheduledDate !== undefined) {
+    updateData.scheduledDate = new Date(updates.scheduledDate);
+  }
+  if (updates.scheduledTime !== undefined) {
+    updateData.scheduledTime = updates.scheduledTime;
+  }
 
   // Update in database
   const updatedPost = await updatePost(postId, updateData);
@@ -87,6 +96,8 @@ export async function editPost(
  * @param options.regenerateCaption - Regenerate caption (default: true)
  * @param options.regeneratePrompt  - Regenerate image prompt only (default: false)
  * @param options.regenerateImage   - Regenerate image prompt + generate actual image (default: false)
+ * @param options.feedback          - Optional user feedback to steer regeneration (default: undefined)
+ * @param options.templateStyle     - Optional premium template style (default: undefined)
  */
 export async function regeneratePost(
   postId: string,
@@ -94,16 +105,20 @@ export async function regeneratePost(
     regenerateCaption?: boolean;
     regeneratePrompt?: boolean;
     regenerateImage?: boolean;
+    feedback?: string;
+    templateStyle?: 'glass' | 'bold' | 'elegant';
   } = {}
 ): Promise<any> {
   const {
     regenerateCaption = true,
     regeneratePrompt = false,
     regenerateImage = false,
+    feedback,
+    templateStyle,
   } = options;
 
   console.log(
-    `[PostManagement] Regenerating post ${postId} (caption:${regenerateCaption} prompt:${regeneratePrompt} image:${regenerateImage})...`
+    `[PostManagement] Regenerating post ${postId} (caption:${regenerateCaption} prompt:${regeneratePrompt} image:${regenerateImage} feedback:${feedback ? feedback.substring(0, 30) + '...' : 'none'} templateStyle:${templateStyle || 'none'})...`
   );
 
   // Get existing post
@@ -171,7 +186,7 @@ export async function regeneratePost(
   // ========================================================================
 
   if (regenerateCaption) {
-    updateData.caption = await generateCaption(calendarItem, strategy, normalizedInput);
+    updateData.caption = await generateCaption(calendarItem, strategy, normalizedInput, undefined, feedback);
   }
 
   // ========================================================================
@@ -182,7 +197,8 @@ export async function regeneratePost(
     updateData.imagePrompt = await generateDetailedImagePrompt(
       calendarItem,
       strategy,
-      normalizedInput
+      normalizedInput,
+      feedback
     );
   }
 
@@ -194,23 +210,34 @@ export async function regeneratePost(
     const newPrompt = await generateDetailedImagePrompt(
       calendarItem,
       strategy,
-      normalizedInput
+      normalizedInput,
+      feedback
     );
     updateData.imagePrompt = newPrompt;
-
-    const imageResult = await generateImage(calendarItem, normalizedInput);
-    const imageUrl = await uploadImageToStorage(imageResult, existingPost.campaignId);
-    updateData.imageUrl = imageUrl;
-    updateData.imageModel = imageResult.metadata.model;
   }
 
-  if (Object.keys(updateData).length === 0) {
-    return existingPost; // Nothing to do
-  }
+  // If we only regenerated the caption or prompt (but NOT the actual image), we do a standard DB update.
+  if (!regenerateImage) {
+    if (Object.keys(updateData).length === 0) {
+      return existingPost; // Nothing to do
+    }
+    const updatedPost = await updatePost(postId, updateData);
+    console.log(`[PostManagement] ✓ Post ${postId} regenerated (metadata only)`);
+    return updatedPost;
+  } else {
+    // If regenerating the actual image, we save the new caption/prompt to DB first,
+    // and then call the premium composite on-demand generation pipeline.
+    await updatePost(postId, updateData);
+    console.log(`[PostManagement] Saved new prompt/metadata for ${postId}. Triggering premium media generation...`);
 
-  const updatedPost = await updatePost(postId, updateData);
-  console.log(`[PostManagement] ✓ Post ${postId} regenerated`);
-  return updatedPost;
+    const { isVideoContentType, generatePostVideo } = await import('./onDemandVideoGeneration');
+    const mediaUrl = isVideoContentType(existingPost.contentType)
+      ? await generatePostVideo(postId, true)
+      : await generatePostImage(postId, false, true, templateStyle, undefined, feedback);
+
+    console.log(`[PostManagement] ✓ Post ${postId} fully regenerated with premium composited ad layout: ${mediaUrl}`);
+    return getPostById(postId);
+  }
 }
 
 /**
@@ -333,7 +360,14 @@ export async function deletePost(postId: string): Promise<boolean> {
     throw new Error(`Post not found: ${postId}`);
   }
 
-  // Delete from database
+  // 1. Delete associated media from MinIO object storage (composite + subject mask)
+  try {
+    await deleteFolderFromStorage(`posts/${postId}/`);
+  } catch (err: any) {
+    console.error(`[PostManagement] ⚠ MinIO deletion failed during post delete: ${err.message}`);
+  }
+
+  // 2. Delete from database
   await deletePostFromDB(postId);
 
   console.log(`[PostManagement] ✓ Post ${postId} deleted`);
@@ -406,11 +440,11 @@ export async function addExtraPost(
   // Generate caption
   const caption = await generateCaption(calendarItem, strategy, normalizedInput);
 
-  // Generate image
-  const imageResult = await generateImage(calendarItem, normalizedInput);
-  const imageUrl = await uploadImageToStorage(
-    imageResult,
-    campaignId
+  // Generate detailed image prompt using our LLM prompt generator (with color and geography infusion!)
+  const detailedPrompt = await generateDetailedImagePrompt(
+    calendarItem,
+    strategy,
+    normalizedInput
   );
 
   // Generate hashtags
@@ -422,14 +456,13 @@ export async function addExtraPost(
     caption: caption,
     hashtags: hashtags,
     callToAction: calendarItem.is_festival ? 'Join us in celebrating!' : 'Learn more about our services',
-    imageUrl: imageUrl,
-    detailedImagePrompt: imageResult.metadata.prompt || '',
+    imageUrl: '',
+    detailedImagePrompt: detailedPrompt,
     metadata: {
       contentPillar: calendarItem.is_festival ? undefined : calendarItem.pillar,
       festival: calendarItem.is_festival ? calendarItem.festival_name : undefined,
       topic: calendarItem.topic,
-      imageModel: imageResult.metadata.model,
-      imageGenerated: true,
+      imageGenerated: false,
       generatedAt: new Date(),
     },
   };
@@ -443,8 +476,23 @@ export async function addExtraPost(
     normalizedInput.timezone
   );
 
+  const newPostId = savedIds[0];
+  console.log(`[PostManagement] Saved extra post ${newPostId} skeleton. Debiting 1 regeneration token...`);
+  
+  const { debitToken, refundToken } = await import('./tokenService');
+  await debitToken(campaignId, newPostId);
+
+  try {
+    // Now run the premium on-demand image generation loop (saliency, color sampling, depth mask, Layout Director, Playwright compositor)
+    await generatePostImage(newPostId, false, true);
+  } catch (genErr: any) {
+    console.error(`[PostManagement] Failed to generate image for extra post, refunding token...`);
+    await refundToken(campaignId, newPostId);
+    throw genErr;
+  }
+
   // Fetch and return the saved post
-  const savedPost = await getPostById(savedIds[0]);
+  const savedPost = await getPostById(newPostId);
 
   console.log(`[PostManagement] ✓ Extra post created: ${savedIds[0]}`);
   return savedPost;

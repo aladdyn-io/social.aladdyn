@@ -23,6 +23,13 @@ declare global {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  // Development mode bypass for easy testing via local demo.html
+  if (process.env.NODE_ENV !== 'production') {
+    req.user = { id: 'dev-user-id', email: 'dev@aladdyn.com', role: 'admin' };
+    next();
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

@@ -26,6 +26,7 @@
     "@aws-sdk/client-s3": "^3.496.0",
     "@bull-board/api": "^6.20.6",
     "@bull-board/express": "^6.20.6",
+    "@imgly/background-removal-node": "^1.4.5",
     "@prisma/client": "^5.10.2",
     "axios": "^1.13.3",
     "bullmq": "^5.4.2",
@@ -38,8 +39,10 @@
     "multer": "^2.1.1",
     "openai": "^4.24.1",
     "pg": "^8.11.3",
+    "playwright": "^1.60.0",
     "replicate": "^1.4.0",
-    "sharp": "^0.34.5",
+    "sharp": "0.32.6",
+    "tesseract.js": "^7.0.0",
     "uuid": "^13.0.0",
     "zod": "^3.22.4"
   },
@@ -57,5 +60,8 @@
     "tsc-alias": "^1.8.8",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "sharp": "0.32.6"
   }
 }

@@ -14,7 +14,7 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
 
 2. **Open the demo**:
    ```
-   http://localhost:5500/demo.html
+   http://localhost:3000/demo.html
    ```
    Or open the file directly in a browser (ensure API is accessible)
 
@@ -27,11 +27,14 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
 **What You Can Test**:
 
 - ✅ Campaign creation with custom inputs
-- ✅ View generated posts with images
+- ✅ View generated posts in grid layout
+- ✅ Toggle between Card Grid and Calendar Planner views
+- ✅ Chronological calendar slot indicators, platform tags (IG / LN), and render status indicators
+- ✅ Interactive cross-scroll scroll and card flash highlight synchronization
 - ✅ Edit post captions inline
 - ✅ Regenerate post captions (uses persisted data)
 - ✅ Regenerate posts with new images
-- ✅ Delete posts
+- ✅ Delete posts (purges database records and purges MinIO storage assets in cascade)
 - ✅ Add extra posts for specific dates
 - ✅ View real-time processing times
 - ✅ See content pillar distribution
@@ -41,16 +44,20 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
 1. Fill in industry, services, duration, geography
 2. Click "Generate Content" → Wait 30-90 seconds
 3. View posts in grid layout
-4. Each post shows:
-   - Generated image
+4. Click the **📅 Calendar Planner** tab to view your chronological monthly posting grids:
+   - View scheduled post tiles with platform-specific branding (`IG` in Pink, `LN` in Blue)
+   - View render status dots (Green for rendered images, Yellow for pending/on-demand)
+   - Click a calendar tile → switches view and scrolls smoothly to flash a high-contrast target border
+5. Each post shows:
+   - Generated image with depth compositing
    - Caption with hashtags
    - Scheduled date
    - Management buttons (Edit, Regenerate, Delete)
-5. Test all management operations
+6. Test all management operations
 
 **Key Validations**:
 
-- No duplicate topics in generated posts
+- No duplicate topics in generated posts (sequential generation)
 - Post regeneration preserves context (uses calendar_entry_id)
 - Edits persist in database
 - UI updates immediately after operations
@@ -237,28 +244,6 @@ Each post card displays:
 | Delete Post                 | ~50-150ms   | N/A                       |
 | Cache Stats                 | ~50ms       | N/A                       |
 
-### Phase Improvements
-
-**Baseline** (Before optimizations):
-
-- 30-day campaign: ~120 seconds
-
-**Phase 1** (Data consistency):
-
-- 30-day campaign: ~110 seconds
-- Improvement: 8% faster
-
-**Phase 2** (Performance optimization):
-
-- 30-day campaign: ~65 seconds
-- Improvement: 46% faster than baseline
-
-**Phase 3** (Caching):
-
-- 30-day campaign (first run): ~60 seconds
-- 30-day campaign (cached): ~50 seconds
-- Improvement: 58% faster than baseline
-
 ---
 
 ## Test Scenarios
@@ -367,6 +352,22 @@ Each post card displays:
 
 ---
 
+### Scenario 6: Liquid HTML Dynamic Layout Testing
+
+**Goal**: Verify the system generates and captures custom Tailwind overlays on-the-fly
+
+**Steps**:
+
+1. Run a campaign generation (Tab 1)
+2. Choose a generated post focusing on customer reviews, testimonials, or high-impact promotions
+3. Click the on-demand composite generation button
+4. Verify the composite image:
+   - Check if custom fonts like `Lobster` or `Pacifico` are loaded.
+   - Verify that punchy keywords are styled with custom highlight colors.
+   - Confirm star rating headers (`★★★★★`) or verified user quote bubbles are embedded dynamically.
+
+---
+
 ## Troubleshooting
 
 ### Test Failures
@@ -387,19 +388,16 @@ Each post card displays:
 
 - **Cause**: Post ID not found or database issue
 - **Fix**: Verify post exists in database
-- **Query**: `SELECT * FROM posts WHERE post_id = '...'`
 
 **"Regenerate Post Caption" Fails**
 
 - **Cause**: Missing calendar_entry_id in post record
 - **Fix**: Regenerate campaign or check database schema
-- **Note**: Should fallback to reconstruction with warning
 
 **"Cache Performance" Fails**
 
 - **Cause**: Cache endpoints not enabled
 - **Fix**: Verify cache.ts is imported in server.ts
-- **Check**: `GET /api/v1/cache/stats` returns valid response
 
 ### Performance Issues
 
@@ -408,14 +406,12 @@ Each post card displays:
 - Check OpenAI API rate limits
 - Verify network connection
 - Check server logs for errors
-- Consider reducing `total_days` or `frequency_per_week`
 
 **Low Cache Hit Rate (<20%)**
 
 - Each test run uses different campaigns
 - Cache keys include industry/geography/brand_stage
 - Normal for varied testing
-- Real usage should show 60-80% hit rate
 
 **UI Not Updating**
 
@@ -440,6 +436,7 @@ Each post card displays:
 8. **No console errors** during normal usage
 9. **Performance metrics** match expected benchmarks
 10. **Visual feedback** works (success messages, loading spinners)
+11. **Dynamic HTML overlays** render custom typographic accents beautifully
 
 ---
 
@@ -464,5 +461,3 @@ The updated `demo.html` provides:
 ✅ **Cache management** UI  
 ✅ **Performance metrics** display  
 ✅ **Comprehensive documentation**
-
-This allows complete validation of all Phase 1-3 implementations without writing separate test scripts.

@@ -13,6 +13,7 @@ import { redisConnection } from './redis';
 export const QUEUE_NAMES = {
   PUBLISH: 'social-publish',
   IMAGE_GEN: 'social-image-gen',
+  VIDEO_GEN: 'social-video-gen',
   ENGAGEMENT_POLL: 'social-engagement-poll',
 } as const;
 
@@ -51,6 +52,17 @@ export const engagementPollQueue = new Queue(QUEUE_NAMES.ENGAGEMENT_POLL, {
   },
 });
 
+/** Video generation queue — processes on-demand video generation requests */
+export const videoGenQueue = new Queue(QUEUE_NAMES.VIDEO_GEN, {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: 'fixed', delay: 10_000 }, // 10s fixed — video jobs are slow
+    removeOnComplete: { count: 200 },
+    removeOnFail: { count: 100 },
+  },
+});
+
 // ── Job data types ───────────────────────────────────────────────────────────
 
 export interface PublishJobData {
@@ -69,4 +81,8 @@ export interface EngagementPollJobData {
   platform: string;
   funnelId: string;
   userId: string;
+}
+
+export interface VideoGenJobData {
+  postId: string;
 }

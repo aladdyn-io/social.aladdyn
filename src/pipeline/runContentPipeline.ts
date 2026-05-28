@@ -17,23 +17,12 @@ import {
   saveCalendarToDB,
 } from '../db/database';
 import { createLogger } from '../utils/logger';
+import prisma from '../lib/prisma';
+import { CampaignPipelineOrchestrator } from './orchestrator';
 
 const logger = createLogger({ service: 'content-pipeline' });
 
-function getCountryCode(geography: string): string {
-  const mapping: Record<string, string> = {
-    india: 'IN',
-    'united states': 'US',
-    usa: 'US',
-    uk: 'GB',
-    'united kingdom': 'GB',
-    canada: 'CA',
-    australia: 'AU',
-    singapore: 'SG',
-    uae: 'AE',
-  };
-  return mapping[geography.toLowerCase()] || 'IN';
-}
+
 
 export async function runContentPipeline(
   input: ContentInput,
@@ -41,7 +30,49 @@ export async function runContentPipeline(
   funnelId?: string
 ): Promise<ContentOutput> {
   try {
-    // ── Step 1: Fetch Genie Context (website knowledge + business profile) ───
+    // ── Upgraded Path: Use Resumable Staged State Machine Orchestrator ───────
+    if (campaignId) {
+      logger.info(`Running pipeline via Staged State Machine Orchestrator for campaign: ${campaignId}`);
+
+      let run = await prisma.pipelineRun.findUnique({
+        where: { campaignId }
+      });
+
+      if (!run) {
+        // Ingest Genie Scrape funnel ID snapshot
+        const enrichedInput = { ...input, funnelId };
+        run = await CampaignPipelineOrchestrator.initializeRun(campaignId, enrichedInput);
+      }
+
+      // Synchronously execute run stages with automatic retries and overrides support
+      await CampaignPipelineOrchestrator.executeRun(run.id);
+
+      // Verify execution succeeded by checking final status
+      const updatedRun = await prisma.pipelineRun.findUniqueOrThrow({
+        where: { id: run.id },
+        include: { stages: true }
+      });
+
+      if (updatedRun.status === 'FAILED') {
+        const failedStage = updatedRun.stages.find(s => s.status === 'FAILED');
+        throw new Error(`Orchestrator stage failed: ${failedStage?.stageName || 'Unknown'} - ${failedStage?.errorMessage || 'Execution error'}`);
+      }
+
+      // Load generated stage outputs from the database
+      const strategy = updatedRun.stages.find(s => s.stageName === 'campaignStrategy')?.outputJson as any;
+      const calendar = updatedRun.stages.find(s => s.stageName === 'generateCalendar')?.outputJson as any;
+      const posts = updatedRun.stages.find(s => s.stageName === 'generatePosts')?.outputJson as any;
+
+      if (!strategy || !calendar || !posts) {
+        throw new Error('Completed pipeline run was missing required stage output records.');
+      }
+
+      return { strategy, calendar, posts };
+    }
+
+    // ── Fallback Path: Legacy Sequential black-box workflow (if no campaignId) ───
+    logger.info('Running legacy sequential content generation pipeline (No campaign ID)');
+
     let websiteContext: string | undefined;
     let enrichedInput = input;
     if (funnelId) {
@@ -51,54 +82,22 @@ export async function runContentPipeline(
           websiteContext = genieCtx.websiteSummary;
           logger.info('Got website context from genie', { chars: String(websiteContext.length) });
         }
-        // Auto-populate missing input fields from scraped data
         enrichedInput = {
           ...input,
           industry: input.industry?.trim() || genieCtx.industry || 'General Business',
           geography: input.geography?.trim() || genieCtx.geography || 'India',
           services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
         };
-        logger.info('Enriched input', { industry: enrichedInput.industry ?? '', geography: enrichedInput.geography ?? '' });
-      } else {
-        logger.info('No genie context available — using input data only');
-        enrichedInput = {
-          ...input,
-          industry: input.industry?.trim() || 'General Business',
-          geography: input.geography?.trim() || 'India',
-          services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
-        };
       }
-    } else {
-      // No funnelId — still apply fallbacks so normalizeInput doesn't throw
-      enrichedInput = {
-        ...input,
-        industry: input.industry?.trim() || 'General Business',
-        geography: input.geography?.trim() || 'India',
-        services: (input.services?.length ?? 0) > 0 ? input.services : ['Our Services'],
-      };
     }
 
-    // ── Step 2: Normalize ────────────────────────────────────────────────────
     const normalizedInput = normalizeInput(enrichedInput);
-
-    // ── Step 3: Generate Strategy ─────────────────────────────────────────────
     const strategy = await generateStrategy(normalizedInput, websiteContext);
-
-    let strategyId: string | undefined;
-    if (campaignId) {
-      try {
-        strategyId = await saveStrategyToDB(campaignId, strategy);
-        logger.info('Strategy saved', { strategyId });
-      } catch (err) {
-        logger.error('Failed to save strategy (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    // ── Step 4: Fetch Festivals ──────────────────────────────────────────────
+    
     let festivals: FestivalEvent[] = [];
     if (normalizedInput.festival_enabled) {
       try {
-        const { getFestivalsForDateRange } = await import('../services/festivalApi');
+        const { getFestivalsForDateRange, getCountryCode } = await import('../services/festivalApi');
         const startDate = new Date();
         const endDate = new Date(startDate);
         endDate.setDate(endDate.getDate() + normalizedInput.total_days);
@@ -107,82 +106,42 @@ export async function runContentPipeline(
           endDate,
           getCountryCode(normalizedInput.geography)
         );
-        logger.info('Loaded festivals', { count: String(festivals.length) });
-      } catch (err) {
-        logger.error('Festival fetch failed (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
+      } catch (err: any) {
+        logger.error(`Festival fetch failed: ${err.message}`);
       }
     }
 
-    // ── Step 5: Generate Calendar ────────────────────────────────────────────
-    const calendar = await generateCalendar(normalizedInput, strategy, festivals, campaignId);
+    const calendar = await generateCalendar(normalizedInput, strategy, festivals);
+    
+    const allPosts: any[] = [];
+    const hasAssignedPlatforms = calendar && calendar.length > 0 && calendar.every(item => item.platform);
 
-    if (campaignId && strategyId) {
-      try {
-        await saveCalendarToDB(campaignId, strategyId, calendar);
-        logger.info('Calendar saved', { entries: String(calendar.length) });
-      } catch (err) {
-        logger.error('Failed to save calendar (non-fatal)', { error: err instanceof Error ? err.message : String(err) });
+    if (hasAssignedPlatforms) {
+      const platformGroups: Record<string, any[]> = {};
+      for (const item of calendar) {
+        const plat = item.platform!;
+        if (!platformGroups[plat]) platformGroups[plat] = [];
+        platformGroups[plat].push(item);
+      }
+
+      for (const [plat, items] of Object.entries(platformGroups)) {
+        logger.info(`Generating legacy platform-specific posts for: ${plat} (${items.length} posts)`);
+        const platformInput = { ...normalizedInput, platform: plat };
+        const platformPosts = await generatePosts(items, platformInput, strategy, websiteContext);
+        allPosts.push(...platformPosts.map(p => ({ ...p, platform: plat })));
+      }
+    } else {
+      const platforms = normalizedInput.platforms || [normalizedInput.platform || 'instagram'];
+      for (const plat of platforms) {
+        const platformInput = { ...normalizedInput, platform: plat };
+        const platformPosts = await generatePosts(calendar, platformInput, strategy, websiteContext);
+        allPosts.push(...platformPosts.map(p => ({ ...p, platform: plat })));
       }
     }
 
-    // ── Step 6: Generate Posts (captions + image prompts) ────────────────────
-    // Determine all platforms — multi-platform campaigns generate a post set per platform
-    const campaignPlatforms = enrichedInput.platforms;
-    const platformsToGenerate =
-      campaignPlatforms && campaignPlatforms.length > 1
-        ? campaignPlatforms
-        : [normalizedInput.platform];
+    return { strategy, calendar, posts: allPosts };
 
-    const postingTimes = (enrichedInput as any).postingTimes as
-      | Record<string, string[]>
-      | null
-      | undefined;
-
-    let allPosts = [] as typeof posts;
-    // Declare posts outside the loop so TypeScript is happy
-    let posts: Awaited<ReturnType<typeof generatePosts>> = [];
-
-    for (const platform of platformsToGenerate) {
-      logger.info('Generating posts for platform', { platform });
-      const platformInput = { ...normalizedInput, platform };
-      const platformPosts = await generatePosts(
-        calendar,
-        platformInput,
-        strategy,
-        websiteContext
-      );
-
-      // ── Step 7: Save Posts ─────────────────────────────────────────────────
-      if (campaignId) {
-        try {
-          const platformTime =
-            postingTimes?.[platform]?.[0] ?? normalizedInput.scheduledTime;
-          const savedIds = await savePostsToDB(
-            campaignId,
-            platformPosts,
-            platform,
-            platformTime,
-            normalizedInput.timezone
-          );
-          logger.info('Posts saved', {
-            count: String(savedIds.length),
-            platform,
-          });
-        } catch (err) {
-          logger.error('Failed to save posts (non-fatal)', {
-            error: err instanceof Error ? err.message : String(err),
-            platform,
-          });
-        }
-      }
-
-      allPosts = allPosts.concat(platformPosts);
-    }
-
-    posts = allPosts;
-
-    return { strategy, calendar, posts };
-  } catch (error) {
+  } catch (error: any) {
     throw new Error(
       `Pipeline failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     );

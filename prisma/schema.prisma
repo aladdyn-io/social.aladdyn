@@ -61,6 +61,8 @@ model SocialCampaign {
 
   strategy SocialStrategy?
   posts    SocialPost[]
+  pipelineRun PipelineRun?
+  tokenLedger CampaignTokenLedger?
 
   @@index([funnelId])
   @@index([userId])
@@ -135,6 +137,11 @@ model SocialPost {
   imageUrl       String? // MinIO URL after generation
   imageGenerated Boolean @default(false)
   imageModel     String?
+
+  // Video lifecycle
+  videoPrompt  String?  @map("video_prompt") @db.Text
+  mediaType    String   @map("media_type") @default("image")
+  isFallback   Boolean  @map("is_fallback") @default(false)
 
   // Metadata
   contentPillar String?
@@ -217,5 +224,92 @@ model SocialEngagement {
   @@index([postId])
   @@index([leadSignalSentAt])
   @@map("social_engagements")
+  @@schema("social")
+}
+
+// ── Upgraded Pipeline State Tracking ──────────────────────────────────────────
+
+model PipelineRun {
+  id            String               @id @default(uuid())
+  campaignId    String               @unique
+  campaign      SocialCampaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status        PipelineStatus       @default(PENDING)
+  brandInput    Json
+  createdAt     DateTime             @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  stages        PipelineStageOutput[]
+
+  @@map("pipeline_runs")
+  @@schema("social")
+}
+
+model PipelineStageOutput {
+  id            String         @id @default(uuid())
+  runId         String
+  pipelineRun   PipelineRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stageName     String
+  status        StageStatus    @default(PENDING)
+  outputJson    Json?
+  errorMessage  String?        @db.Text
+  attemptCount  Int            @default(0)
+  completedAt   DateTime?
+
+  @@unique([runId, stageName])
+  @@map("pipeline_stage_outputs")
+  @@schema("social")
+}
+
+enum PipelineStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+
+  @@schema("social")
+}
+
+enum StageStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  OVERRIDDEN
+
+  @@schema("social")
+}
+
+// ── Regeneration Token System ─────────────────────────────────────────────────
+
+model CampaignTokenLedger {
+  id         String   @id @default(uuid())
+  campaignId String   @unique @map("campaign_id")
+  balance    Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  campaign     SocialCampaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  transactions CampaignTokenTransaction[]
+
+  @@map("campaign_token_ledgers")
+  @@schema("social")
+}
+
+model CampaignTokenTransaction {
+  id           String   @id @default(uuid())
+  campaignId   String   @map("campaign_id")
+  ledgerId     String   @map("ledger_id")
+  type         String
+  amount       Int
+  balanceAfter Int      @map("balance_after")
+  description  String
+  postId       String?  @map("post_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ledger CampaignTokenLedger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@map("campaign_token_transactions")
   @@schema("social")
 }

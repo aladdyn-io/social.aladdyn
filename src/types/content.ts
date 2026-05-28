@@ -60,6 +60,9 @@ export interface ContentInput {
 
   /** Scheduled posting time in HH:mm format (e.g., '10:00') */
   scheduledTime?: string;
+
+  /** Content format weights mix (e.g., photo, reel, story) */
+  contentMix?: any;
 }
 
 // ============================================================================
@@ -180,6 +183,9 @@ export interface CalendarItem {
 
   /** Festival/event name (if is_festival is true) */
   festival_name?: string;
+
+  /** Target platform for this specific post (e.g. 'instagram', 'linkedin', 'whatsapp') */
+  platform?: string;
 }
 
 /**
@@ -236,11 +242,20 @@ export interface PostItem {
   /** Detailed, comprehensive prompt for image generation */
   detailedImagePrompt: string;
 
+  /** Motion-aware prompt for video generation (reel/story slots only) */
+  videoPrompt?: string;
+
   /** Public URL to generated image (null until generated on-demand) */
   imageUrl: string | null;
 
   /** Metadata about content generation */
   metadata: PostMetadata;
+
+  /** Explicit target platform content type (e.g. 'photo', 'reel', 'carousel', 'story', 'written') */
+  contentType?: string;
+
+  /** Explicit media classification (e.g. 'image' or 'video') */
+  mediaType?: string;
 }
 
 /**
@@ -266,4 +281,20 @@ export interface PostMetadata {
 
   /** Whether image has been generated yet */
   imageGenerated: boolean;
+}
+
+export interface CopyBlueprintElement {
+  type: 'feature' | 'quote' | 'statistic' | 'badge' | 'paragraph' | 'cta';
+  text: string;
+  icon?: string; // Optional emoji or symbol
+  iconName?: string; // Lucide icon name (e.g., 'brain', 'shield-check', 'zap', 'heart')
+  value?: string; // For statistics: the big number (e.g., '40%', '100+', '3x')
+  isNegative?: boolean; // If this element represents a negative trait (e.g. "No parabens")
+}
+
+export interface CopyBlueprint {
+  intent: string;
+  primaryHeadline: string;
+  secondarySubtitle: string;
+  elements: CopyBlueprintElement[];
 }

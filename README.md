@@ -2,6 +2,9 @@
 
 AI-powered content generation backend for social media campaigns with REST API.
 
+> [!IMPORTANT]
+> **AI Onboarding & Project Status**: For a complete, high-fidelity transmission of the current architecture, recent major diagnostics (e.g. combined DateTime scheduler, LinkedIn direct publishing, demo.html interactive card inputs), active issues, and pending implementation lists, please refer to the master [PROJECT_STATUS.md](PROJECT_STATUS.md) at the root.
+
 ## 🚀 Quick Start
 
 ```bash
@@ -202,29 +205,30 @@ All module interfaces are defined in `types.ts`. Key types:
 
 ### ✅ Completed
 
-- [x] Project structure
-- [x] Type definitions
+- [x] Project structure & Type definitions
 - [x] Main pipeline orchestration
-- [x] All module stubs with clear TODOs
-- [x] Configuration setup
-- [x] **Express REST API server**
-- [x] **API documentation**
-- [x] **Error handling middleware**
-- [x] **Test endpoints and scripts**
+- [x] Configuration setup & Express REST API server
+- [x] API documentation & Error handling middleware
+- [x] **Stable Diffusion (Local/sharp) Integration**
+- [x] **Replicate API Integration (FLUX schnell)**
+- [x] **HuggingFace API Integration (XLabs flux-RealismLora)**
+- [x] **DeepAI API Integration (text2img)**
+- [x] **Database Schema Validation & PostgreSQL Post Persistency**
+- [x] **ONNX-Powered Subject Masking & Foreground Cutout Extraction**
+- [x] **Playwright 3D Sandwich Compositor & Google Fonts System**
+- [x] **Automated Heuristic Quality Gating (OCR scan, detail variance, color sampler)**
+- [x] **Interactive Chronological Content Calendar UI inside Diagnostic Console (demo.html)**
+- [x] **Cascade Storage Deletion (MinIO folder purges on campaign/post delete)**
+- [x] **Duplicate Topic Prevention (Sequential LLM historical check)**
+- [x] **Automatic Orchestrator Re-rolls & Error Recovery**
+- [x] **Ultra-Premium Visual Overhaul (rotated cursive Caveat/Pacifico fonts, solid/double-ring checklist badges, high-fashion pill circular arrow CTAs)**
 
 ### 🚧 TODO
 
-- [ ] Implement local Stable Diffusion integration
-- [ ] Implement Replicate API integration
-- [ ] Implement HuggingFace API integration
-- [ ] Database schema validation
-- [ ] Save posts to database
-- [ ] Error recovery and retries
-- [ ] Unit tests
-- [ ] Integration tests
-- [ ] Rate limiting for APIs
-- [ ] Logging system
-- [ ] Monitoring/observability
+- [ ] Unit tests & integration tests
+- [ ] Rate limiting for public APIs
+- [ ] Continuous telemetry dashboard
+
 
 ## Usage Example
 

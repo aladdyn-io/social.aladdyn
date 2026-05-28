@@ -1,2329 +1,1623 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Social Scene Content Generator - Full Cycle Demo</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 20px;
-      }
-
-      .container {
-        max-width: 1400px;
-        margin: 0 auto;
-        background: white;
-        border-radius: 20px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        overflow: hidden;
-      }
-
-      .header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 40px;
-        text-align: center;
-        position: relative;
-      }
-
-      .header h1 {
-        font-size: 2.5rem;
-        margin-bottom: 10px;
-      }
-
-      .header p {
-        font-size: 1.1rem;
-        opacity: 0.9;
-      }
-
-      .header-actions {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        display: flex;
-        gap: 10px;
-      }
-
-      .header-btn {
-        background: rgba(255, 255, 255, 0.2);
-        color: white;
-        border: 2px solid white;
-        padding: 8px 16px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.3s;
-      }
-
-      .header-btn:hover {
-        background: white;
-        color: #667eea;
-      }
-
-      .content {
-        padding: 40px;
-      }
-
-      .tabs {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 30px;
-        border-bottom: 2px solid #e0e0e0;
-      }
-
-      .tab {
-        padding: 15px 30px;
-        background: transparent;
-        border: none;
-        border-bottom: 3px solid transparent;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: 600;
-        color: #666;
-        transition: all 0.3s;
-      }
-
-      .tab:hover {
-        color: #667eea;
-      }
-
-      .tab.active {
-        color: #667eea;
-        border-bottom-color: #667eea;
-      }
-
-      .tab-content {
-        display: none;
-      }
-
-      .tab-content.active {
-        display: block;
-      }
-
-      .info-card {
-        background: #e3f2fd;
-        border-left: 4px solid #2196f3;
-        padding: 20px;
-        border-radius: 8px;
-        margin-bottom: 30px;
-      }
-
-      .info-card h3 {
-        color: #1976d2;
-        margin-bottom: 10px;
-      }
-
-      .info-card ul {
-        margin-left: 20px;
-        color: #555;
-      }
-
-      .info-card li {
-        margin: 5px 0;
-      }
-
-      .form-section {
-        background: #f7f9fc;
-        padding: 30px;
-        border-radius: 15px;
-        margin-bottom: 30px;
-      }
-
-      .cache-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin: 20px 0;
-      }
-
-      .cache-stat {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        border: 2px solid #e0e0e0;
-        text-align: center;
-      }
-
-      .cache-stat-value {
-        font-size: 2rem;
-        font-weight: bold;
-        color: #667eea;
-        margin-bottom: 5px;
-      }
-
-      .cache-stat-label {
-        color: #666;
-        font-size: 0.9rem;
-      }
-
-      .form-group {
-        margin-bottom: 20px;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: 600;
-        color: #333;
-      }
-
-      input[type="text"],
-      input[type="number"],
-      select {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 16px;
-        transition: border-color 0.3s;
-      }
-
-      input[type="text"]:focus,
-      input[type="number"]:focus,
-      select:focus {
-        outline: none;
-        border-color: #667eea;
-      }
-
-      .checkbox-group {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .checkbox-group input[type="checkbox"] {
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-      }
-
-      .services-input {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .service-item {
-        display: flex;
-        gap: 10px;
-      }
-
-      .service-item input {
-        flex: 1;
-      }
-
-      .btn {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 15px 40px;
-        font-size: 18px;
-        font-weight: 600;
-        border-radius: 10px;
-        cursor: pointer;
-        transition:
-          transform 0.2s,
-          box-shadow 0.2s;
-        width: 100%;
-      }
-
-      .btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-      }
-
-      .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
-      }
-
-      .loading {
-        text-align: center;
-        padding: 40px;
-      }
-
-      .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #667eea;
-        border-radius: 50%;
-        width: 60px;
-        height: 60px;
-        animation: spin 1s linear infinite;
-        margin: 20px auto;
-      }
-
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-
-      .error {
-        background: #fee;
-        border: 2px solid #f88;
-        color: #c33;
-        padding: 20px;
-        border-radius: 10px;
-        margin-top: 20px;
-      }
-
-      .results {
-        margin-top: 30px;
-      }
-
-      .summary {
-        background: #e8f5e9;
-        border: 2px solid #4caf50;
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 30px;
-      }
-
-      .summary h3 {
-        color: #2e7d32;
-        margin-bottom: 15px;
-      }
-
-      .summary-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-      }
-
-      .stat {
-        background: white;
-        padding: 15px;
-        border-radius: 8px;
-        text-align: center;
-      }
-
-      .stat-value {
-        font-size: 2rem;
-        font-weight: bold;
-        color: #667eea;
-      }
-
-      .stat-label {
-        color: #666;
-        margin-top: 5px;
-      }
-
-      .posts-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 20px;
-      }
-
-      .post-card {
-        background: white;
-        border: 2px solid #e0e0e0;
-        border-radius: 15px;
-        overflow: hidden;
-        transition:
-          transform 0.3s,
-          box-shadow 0.3s;
-      }
-
-      .post-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-      }
-
-      .post-image {
-        width: 100%;
-        height: 250px;
-        object-fit: cover;
-        background: #f0f0f0;
-      }
-
-      .post-content {
-        padding: 20px;
-      }
-
-      .post-date {
-        color: #999;
-        font-size: 0.9rem;
-        margin-bottom: 10px;
-      }
-
-      .post-caption {
-        color: #333;
-        line-height: 1.6;
-        margin-bottom: 15px;
-      }
-
-      .hashtags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .hashtag {
-        background: #e3f2fd;
-        color: #1976d2;
-        padding: 5px 12px;
-        border-radius: 20px;
-        font-size: 0.9rem;
-      }
-
-      .post-management {
-        background: #fff3e0;
-        border: 2px solid #ff9800;
-        padding: 20px;
-        border-radius: 10px;
-        margin-top: 20px;
-      }
-
-      .post-management h4 {
-        color: #e65100;
-        margin-bottom: 15px;
-      }
-
-      .image-prompt-section {
-        background: #f3e5f5;
-        border: 2px solid #9c27b0;
-        padding: 15px;
-        border-radius: 10px;
-        margin-top: 15px;
-      }
-
-      .image-prompt-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        user-select: none;
-      }
-
-      .image-prompt-header h5 {
-        color: #6a1b9a;
-        margin: 0;
-        font-size: 14px;
-      }
-
-      .toggle-icon {
-        font-size: 18px;
-        color: #9c27b0;
-        transition: transform 0.3s;
-      }
-
-      .toggle-icon.collapsed {
-        transform: rotate(-90deg);
-      }
-
-      .image-prompt-content {
-        margin-top: 10px;
-        max-height: 200px;
-        overflow-y: auto;
-      }
-
-      .image-prompt-content.collapsed {
-        display: none;
-      }
-
-      .image-prompt-text {
-        background: white;
-        padding: 12px;
-        border-radius: 8px;
-        font-size: 13px;
-        line-height: 1.5;
-        color: #555;
-        border: 1px solid #e0e0e0;
-        margin-bottom: 10px;
-      }
-
-      .image-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 10px;
-      }
-
-      .post-actions {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-top: 10px;
-      }
-
-      .btn-small {
-        background: #ff9800;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        font-size: 14px;
-        font-weight: 600;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .btn-small:hover {
-        background: #f57c00;
-        transform: translateY(-1px);
-      }
-
-      .btn-small.danger {
-        background: #f44336;
-      }
-
-      .btn-small.danger:hover {
-        background: #d32f2f;
-      }
-
-      .btn-small.success {
-        background: #4caf50;
-      }
-
-      .btn-small.success:hover {
-        background: #388e3c;
-      }
-
-      .modal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1000;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .modal.show {
-        display: flex;
-      }
-
-      .modal-content {
-        background: white;
-        padding: 30px;
-        border-radius: 15px;
-        max-width: 600px;
-        width: 90%;
-        max-height: 80vh;
-        overflow-y: auto;
-      }
-
-      .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-      }
-
-      .modal-close {
-        background: none;
-        border: none;
-        font-size: 24px;
-        cursor: pointer;
-        color: #999;
-      }
-
-      .modal-close:hover {
-        color: #333;
-      }
-
-      textarea {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 14px;
-        font-family: inherit;
-        resize: vertical;
-        min-height: 100px;
-      }
-
-      textarea:focus {
-        outline: none;
-        border-color: #667eea;
-      }
-
-      .success-message {
-        background: #e8f5e9;
-        border: 2px solid #4caf50;
-        color: #2e7d32;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 15px 0;
-      }
-
-      .test-section {
-        background: #fff3e0;
-        border: 2px solid #ff9800;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 20px 0;
-      }
-
-      .test-section h4 {
-        color: #e65100;
-        margin-bottom: 15px;
-      }
-
-      .test-results {
-        background: white;
-        padding: 15px;
-        border-radius: 8px;
-        margin-top: 10px;
-        max-height: 300px;
-        overflow-y: auto;
-        font-family: "Courier New", monospace;
-        font-size: 12px;
-        white-space: pre-wrap;
-      }
-
-      .expectation-item {
-        display: flex;
-        align-items: center;
-        padding: 15px;
-        background: white;
-        border-radius: 8px;
-        margin: 10px 0;
-        border: 2px solid #e0e0e0;
-        transition: all 0.3s;
-      }
-
-      .expectation-item:hover {
-        border-color: #667eea;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-      }
-
-      .expectation-status {
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        margin-right: 15px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 16px;
-      }
-
-      .expectation-status.pending {
-        background: #e0e0e0;
-      }
-
-      .expectation-status.testing {
-        background: #fff3e0;
-        animation: pulse 1.5s infinite;
-      }
-
-      .expectation-status.passed {
-        background: #4caf50;
-        color: white;
-      }
-
-      .expectation-status.failed {
-        background: #f44336;
-        color: white;
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
-      }
-
-      .expectation-details {
-        flex: 1;
-      }
-
-      .expectation-title {
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 5px;
-      }
-
-      .expectation-desc {
-        color: #666;
-        font-size: 0.9rem;
-      }
-
-      .expectation-time {
-        color: #999;
-        font-size: 0.85rem;
-        margin-left: 15px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>🎨 Social Scene Generator</h1>
-        <p>AI-Powered Social Media Content Creation - Full Cycle Testing</p>
-        <div class="header-actions">
-          <button class="header-btn" onclick="refreshCacheStats()">
-            📊 Cache Stats
-          </button>
-          <button class="header-btn" onclick="testAPIConnection()">
-            🔌 Test API
-          </button>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aladdyn Social - Professional Diagnostic Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Outfit & Plus Jakarta Sans Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f19;
+      color: #f3f4f6;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Outfit', sans-serif;
+    }
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .neon-border-blue {
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+    .neon-border-purple {
+      box-shadow: 0 0 15px rgba(139, 92, 246, 0.15);
+      border-color: rgba(139, 92, 246, 0.3);
+    }
+    .neon-text-glow {
+      text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.3);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.2);
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.4);
+    }
+    @keyframes pulse-glowing {
+      0%, 100% { opacity: 0.6; box-shadow: 0 0 10px rgba(139, 92, 246, 0.2); }
+      50% { opacity: 1; box-shadow: 0 0 20px rgba(139, 92, 246, 0.5); }
+    }
+    .pulse-glow {
+      animation: pulse-glowing 2s infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-5 md:p-8 custom-scrollbar">
+
+  <div class="max-w-[1600px] mx-auto flex flex-col gap-6">
+    
+    <!-- HEADER BAR -->
+    <header class="glass-panel rounded-3xl p-6 flex flex-col md:flex-row justify-between items-center gap-4 shadow-2xl border border-slate-800">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-900/30">
+          <span class="text-2xl font-black text-white">A</span>
+        </div>
+        <div>
+          <h1 class="text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
+            Aladdyn Social <span class="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Staged Engine v2</span>
+          </h1>
+          <p class="text-sm text-slate-400">Interactive Pipeline & High-Fidelity Ad Composite Diagnostic Console</p>
         </div>
       </div>
-
-      <div class="content">
-        <!-- Tabs -->
-        <div class="tabs">
-          <button class="tab active" onclick="switchTab('generate')">
-            Generate Content
-          </button>
-          <button class="tab" onclick="switchTab('tests')">
-            Full Cycle Tests
-          </button>
-          <button class="tab" onclick="switchTab('cache')">
-            Cache Management
-          </button>
-          <button class="tab" onclick="switchTab('docs')">Documentation</button>
+      
+      <div class="flex items-center gap-4">
+        <!-- Connection Indicators -->
+        <div class="flex gap-3">
+          <div id="status-api" class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl">
+            <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"></span>
+            <span class="text-xs font-semibold text-slate-400">API Server</span>
+          </div>
+          <div id="status-db" class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl">
+            <span class="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"></span>
+            <span class="text-xs font-semibold text-slate-400">Postgres DB</span>
+          </div>
         </div>
+        <button onclick="checkConnections()" class="p-2.5 bg-slate-800/80 border border-slate-700 hover:bg-slate-700 text-slate-300 rounded-xl transition-all">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+        </button>
+      </div>
+    </header>
 
-        <!-- Tab 1: Generate Content -->
-        <div id="tab-generate" class="tab-content active">
-          <div class="form-section">
-            <h2 style="margin-bottom: 20px">Campaign Details</h2>
-
-            <div class="form-group">
-              <label for="industry">Industry / Business Type *</label>
-              <input
-                type="text"
-                id="industry"
-                placeholder="e.g., Coffee Shop, Fitness Studio, Digital Agency"
-                required
-              />
-            </div>
-
-            <div
-              style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px"
-            >
-              <div class="form-group">
-                <label for="total_days">Campaign Duration (days)</label>
-                <input
-                  type="number"
-                  id="total_days"
-                  value="14"
-                  min="7"
-                  max="90"
-                />
-              </div>
-
-              <div class="form-group">
-                <label for="frequency">Posts Per Week</label>
-                <input type="number" id="frequency" value="3" min="1" max="7" />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Services Offered *</label>
-              <div class="services-input" id="servicesContainer">
-                <div class="service-item">
-                  <input
-                    type="text"
-                    placeholder="Service 1"
-                    class="service-input"
-                  />
-                </div>
-                <div class="service-item">
-                  <input
-                    type="text"
-                    placeholder="Service 2"
-                    class="service-input"
-                  />
-                </div>
-                <div class="service-item">
-                  <input
-                    type="text"
-                    placeholder="Service 3"
-                    class="service-input"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="geography">Geography</label>
-              <select id="geography">
-                <option value="India">India</option>
-                <option value="USA">USA</option>
-                <option value="UK">UK</option>
-              </select>
-            </div>
-
-            <div class="form-group checkbox-group">
-              <input type="checkbox" id="festival_enabled" checked />
-              <label for="festival_enabled" style="margin-bottom: 0"
-                >Include Festival Posts</label
-              >
-            </div>
-
-            <button class="btn" onclick="generateContent()">
-              Generate Content
+    <!-- MAIN BODY GRID -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      
+      <!-- LEFT COLUMN: CONTROL & PIPELINE MONITOR (7/12 cols) -->
+      <div class="lg:col-span-7 flex flex-col gap-6">
+        
+        <!-- CAMPAIGN REGISTRY EXPLORER -->
+        <section class="glass-panel rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col gap-4">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <span class="text-purple-400">00.</span> Test Campaigns Explorer
+            </h2>
+            <button onclick="loadExistingCampaigns()" class="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 border border-slate-700">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+              Refresh Explorer
             </button>
           </div>
 
-          <div id="loading" class="loading" style="display: none">
-            <div class="spinner"></div>
-            <p style="font-size: 1.2rem; color: #667eea">
-              Generating your content...
-            </p>
-            <p style="color: #999; margin-top: 10px">
-              This may take 30-90 seconds
-            </p>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Pull and inspect previous test campaign runs, load their live stages and generated ad cards, or delete runs permanently.
+          </p>
+
+          <!-- Registry List -->
+          <div id="campaigns-registry-list" class="flex flex-col gap-2.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+            <div class="text-xs text-slate-500 font-semibold italic text-center py-4 bg-slate-900/30 border border-slate-850 rounded-2xl">
+              No campaigns loaded. Click "Refresh Explorer" above.
+            </div>
+          </div>
+        </section>
+
+        <!-- CAMPAIGN FORM PANEL -->
+        <section class="glass-panel rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col gap-5">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <span class="text-blue-400">01.</span> Setup Fresh Campaign Generation
+            </h2>
+            <span class="text-xs text-slate-400 font-medium">Bypasses JWT Auth in Local Dev</span>
           </div>
 
-          <div id="error" class="error" style="display: none"></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-400">Industry Vertical *</label>
+              <input type="text" id="input-industry" value="D2C Skincare" placeholder="e.g. B2B SaaS, D2C Skincare" 
+                     class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-all" />
+            </div>
 
-          <div id="results" class="results" style="display: none">
-            <div class="summary">
-              <h3>✅ Generation Complete!</h3>
-              <div class="summary-stats">
-                <div class="stat">
-                  <div class="stat-value" id="totalPosts">0</div>
-                  <div class="stat-label">Total Posts</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-value" id="strategyPillars">0</div>
-                  <div class="stat-label">Content Pillars</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-value" id="festivalPosts">0</div>
-                  <div class="stat-label">Festival Posts</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-value" id="processingTime">0s</div>
-                  <div class="stat-label">Processing Time</div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-400">Duration (Days)</label>
+                <input type="number" id="input-days" value="14" min="7" max="60" 
+                       class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 text-center" />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-400">Posts/Week</label>
+                <input type="number" id="input-freq" value="3" min="1" max="7" 
+                       class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 text-center" />
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5 md:col-span-2">
+              <label class="text-xs font-semibold text-slate-400">Services Offered (Comma Separated) *</label>
+              <input type="text" id="input-services" value="Hyaluronic Acid Serum, Anti-Aging Cream, Hydrating Face Mist" 
+                     class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-all" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 md:col-span-2">
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-400">Target Geography</label>
+                <input type="text" id="input-geography" value="India" 
+                       class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500" />
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-400">Base Brand Color</label>
+                <div class="flex gap-2">
+                  <input type="color" id="input-color-base" value="#0F172A" class="w-12 h-11 bg-transparent border-0 cursor-pointer rounded-xl" />
+                  <input type="text" id="input-color-base-hex" value="#0F172A" disabled class="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-xs text-slate-400 text-center" />
                 </div>
               </div>
             </div>
 
-            <h3 style="margin-bottom: 20px">Generated Posts</h3>
-            <div class="posts-grid" id="postsContainer"></div>
-          </div>
-        </div>
-
-        <!-- Tab 2: Full Cycle Tests -->
-        <div id="tab-tests" class="tab-content">
-          <div class="info-card">
-            <h3>🧪 Comprehensive Testing Suite</h3>
-            <p>This suite tests all expectations of the complete workflow:</p>
-            <ul>
-              <li>✅ Generate campaign with strategy, calendar, and posts</li>
-              <li>✅ Edit post caption and update UI</li>
-              <li>✅ Regenerate post caption (uses persisted data)</li>
-              <li>✅ Regenerate post with image</li>
-              <li>✅ Delete post and update counts</li>
-              <li>✅ Add extra post for specific date</li>
-              <li>✅ Cache hits for strategy and festivals</li>
-              <li>✅ Duplicate detection for topics</li>
-              <li>✅ Performance metrics tracking</li>
-            </ul>
-          </div>
-
-          <button
-            class="btn"
-            onclick="runFullCycleTests()"
-            style="margin-bottom: 30px"
-          >
-            Run All Tests
-          </button>
-
-          <div id="testProgress" style="display: none">
-            <h3 style="margin-bottom: 20px">Test Progress</h3>
-            <div id="testExpectations"></div>
-          </div>
-
-          <div id="testSummary" style="display: none" class="summary">
-            <h3>Test Summary</h3>
-            <div id="testSummaryContent"></div>
-          </div>
-        </div>
-
-        <!-- Tab 3: Cache Management -->
-        <div id="tab-cache" class="tab-content">
-          <div class="info-card">
-            <h3>💾 Cache Management</h3>
-            <p>
-              View and manage the centralized cache layer that improves
-              performance by 80-90%
-            </p>
-          </div>
-
-          <div class="test-section">
-            <h4>Cache Statistics</h4>
-            <div class="cache-stats" id="cacheStatsDisplay">
-              <div class="cache-stat">
-                <div class="cache-stat-value" id="cacheHits">-</div>
-                <div class="cache-stat-label">Cache Hits</div>
+            <div class="grid grid-cols-2 gap-3 md:col-span-2">
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-blue-400 font-bold">Manual Start Date</label>
+                <input type="date" id="input-start-date" 
+                       class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 font-mono transition-all" />
               </div>
-              <div class="cache-stat">
-                <div class="cache-stat-value" id="cacheMisses">-</div>
-                <div class="cache-stat-label">Cache Misses</div>
-              </div>
-              <div class="cache-stat">
-                <div class="cache-stat-value" id="cacheHitRate">-</div>
-                <div class="cache-stat-label">Hit Rate</div>
-              </div>
-              <div class="cache-stat">
-                <div class="cache-stat-value" id="cacheSize">-</div>
-                <div class="cache-stat-label">Cache Size</div>
-              </div>
-              <div class="cache-stat">
-                <div class="cache-stat-value" id="cacheEvictions">-</div>
-                <div class="cache-stat-label">Evictions</div>
-              </div>
-              <div class="cache-stat">
-                <div class="cache-stat-value" id="cacheSets">-</div>
-                <div class="cache-stat-label">Total Sets</div>
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-blue-400 font-bold">Manual End Date</label>
+                <input type="date" id="input-end-date" 
+                       class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 font-mono transition-all" />
               </div>
             </div>
-            <button
-              class="btn"
-              onclick="refreshCacheStats()"
-              style="margin-top: 20px"
-            >
-              🔄 Refresh Stats
+          </div>
+
+          <div class="flex gap-4 mt-2">
+            <button onclick="launchPipeline()" id="btn-launch" class="flex-1 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-2xl transition-all shadow-lg shadow-purple-900/20 active:scale-[0.98]">
+              Launch Campaign Pipeline
             </button>
           </div>
+        </section>
 
-          <div class="test-section">
-            <h4>Clear Cache</h4>
-            <div class="form-group">
-              <label for="clearPattern"
-                >Pattern (optional - clear all if empty)</label
-              >
-              <input
-                type="text"
-                id="clearPattern"
-                placeholder="e.g., strategy, festival, or leave empty for all"
-              />
-            </div>
-            <button class="btn" onclick="clearCache()">🗑️ Clear Cache</button>
-            <div
-              id="clearCacheResult"
-              style="margin-top: 15px; display: none"
-            ></div>
-          </div>
-        </div>
-
-        <!-- Tab 4: Documentation -->
-        <div id="tab-docs" class="tab-content">
-          <div class="info-card">
-            <h3>📚 API Documentation</h3>
-            <p>Complete reference for all available endpoints</p>
-          </div>
-
-          <div class="test-section">
-            <h4>Core Endpoints</h4>
-            <div style="margin: 15px 0">
-              <strong>POST /api/v1/generate-content</strong><br />
-              Generate complete campaign with strategy, calendar, and posts
-            </div>
-            <div style="margin: 15px 0">
-              <strong>GET /health</strong><br />
-              Check API server health and service availability
+        <!-- STATE MACHINE LIVE DIAGNOSTIC MONITOR -->
+        <section id="monitor-panel" class="glass-panel rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col gap-5 hidden">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <span class="text-purple-400">02.</span> Resumable State Machine Monitor
+            </h2>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400 font-semibold">Active Run ID:</span>
+              <span id="display-run-id" class="text-xs font-mono bg-slate-900/80 border border-slate-800 px-2 py-1 rounded text-purple-400"></span>
             </div>
           </div>
 
-          <div class="test-section">
-            <h4>Post Management</h4>
-            <div style="margin: 15px 0">
-              <strong>PUT /api/v1/posts/:postId</strong><br />
-              Edit post caption, hashtags, or call-to-action
+          <!-- Overall status and Resume Controller -->
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4">
+            <div>
+              <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Overall Pipeline State</div>
+              <div class="flex items-center gap-2 mt-1">
+                <span id="overall-status-badge" class="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-xs font-bold uppercase rounded-full tracking-wider">PENDING</span>
+                <span id="elapsed-time" class="text-xs text-slate-400 font-mono">0.0s elapsed</span>
+              </div>
             </div>
-            <div style="margin: 15px 0">
-              <strong>POST /api/v1/posts/:postId/regenerate</strong><br />
-              Regenerate post caption and/or image using AI
-            </div>
-            <div style="margin: 15px 0">
-              <strong>DELETE /api/v1/posts/:postId</strong><br />
-              Permanently delete a post from database
-            </div>
-            <div style="margin: 15px 0">
-              <strong>POST /api/v1/campaigns/:campaignId/posts/add</strong
-              ><br />
-              Add an extra post for a specific date
+            <div class="flex gap-2">
+              <button onclick="resumeRun()" id="btn-resume" class="py-2.5 px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none">
+                Resume Execution
+              </button>
+              <button onclick="pollRunStatus()" class="p-2.5 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-xl transition-all text-slate-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+              </button>
             </div>
           </div>
 
-          <div class="test-section">
-            <h4>Cache Management</h4>
-            <div style="margin: 15px 0">
-              <strong>GET /api/v1/cache/stats</strong><br />
-              View cache statistics (hits, misses, hit rate, size)
-            </div>
-            <div style="margin: 15px 0">
-              <strong>POST /api/v1/cache/clear</strong><br />
-              Clear all cache or specific pattern
-            </div>
+          <!-- Stages listing -->
+          <div class="flex flex-col gap-3" id="stages-list">
+            <!-- Dynamic Stages Injected Here -->
           </div>
-
-          <div class="test-section">
-            <h4>Performance Metrics</h4>
-            <ul style="margin-left: 20px; color: #555">
-              <li>
-                <strong>Phase 1</strong>: Data Consistency (Duplicate Detection,
-                Persisted Data)
-              </li>
-              <li>
-                <strong>Phase 2</strong>: Performance (48% faster - 65s → 33.5s)
-              </li>
-              <li>
-                <strong>Phase 3</strong>: Caching (15-25% additional
-                improvement)
-              </li>
-              <li><strong>Overall</strong>: 57-62% faster than baseline</li>
-            </ul>
-          </div>
-        </div>
-
-        <div id="loading" class="loading" style="display: none">
-          <div class="spinner"></div>
-          <p style="font-size: 1.2rem; color: #667eea">
-            Generating your content...
-          </p>
-          <p style="color: #999; margin-top: 10px">
-            This may take 30-90 seconds
-          </p>
-        </div>
-
-        <div id="error" class="error" style="display: none"></div>
+        </section>
+        
       </div>
-      <!-- end content -->
-    </div>
-    <!-- end container -->
 
-    <!-- Edit Caption Modal -->
-    <div id="editModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Edit Post Caption</h3>
-          <button class="modal-close" onclick="closeEditModal()">
-            &times;
-          </button>
-        </div>
-        <div class="form-group">
-          <label for="editCaption">Caption</label>
-          <textarea id="editCaption" rows="6"></textarea>
-        </div>
-        <button class="btn" onclick="saveEditedPost()">Save Changes</button>
+      <!-- RIGHT COLUMN: INSPECTOR & DIAGNOSTICS (5/12 cols) -->
+      <div class="lg:col-span-5 flex flex-col gap-6">
+        
+        <!-- STAGE INSPECTOR AND OVERRIDE EDITOR -->
+        <section class="glass-panel rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col gap-4">
+          <div class="border-b border-slate-800 pb-3 flex justify-between items-center">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <span class="text-emerald-400">03.</span> Interactive Inspector & Override
+            </h2>
+            <span id="inspector-stage-label" class="text-xs text-purple-400 font-mono bg-purple-900/20 border border-purple-500/30 px-2 py-0.5 rounded-full font-bold">Select a Stage</span>
+          </div>
+
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Click on any completed or overridden stage inside the pipeline list to view its raw JSON output payload, or apply manual customized edits to override the agent's logic.
+          </p>
+
+          <!-- JSON Viewer -->
+          <div class="relative">
+            <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Stage Output JSON Editor</label>
+            <textarea id="json-inspector" class="w-full h-80 bg-slate-950 font-mono text-xs text-slate-300 border border-slate-800/80 rounded-2xl p-4 focus:outline-none focus:border-purple-500 transition-all custom-scrollbar leading-relaxed" placeholder="// Click an execute stage above to inspect its payload..."></textarea>
+          </div>
+
+          <div class="flex gap-3">
+            <button onclick="submitOverride()" id="btn-override" disabled class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none">
+              Apply Manual Stage Override
+            </button>
+            <button onclick="clearInspector()" class="px-5 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 font-semibold text-sm rounded-xl transition-all">
+              Clear
+            </button>
+          </div>
+        </section>
+
       </div>
+      
     </div>
 
-    <!-- Add Extra Post Modal -->
-    <div id="addPostModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Add Extra Post</h3>
-          <button class="modal-close" onclick="closeAddPostModal()">
-            &times;
+    <!-- CALENDAR AND AD CREATIVES GENERATED (Full span below) -->
+    <main id="output-posts-panel" class="glass-panel rounded-3xl p-6 shadow-2xl border border-slate-800 flex flex-col gap-6 hidden">
+      <div class="border-b border-slate-800 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-extrabold text-white flex items-center gap-2">
+            <span class="text-blue-400">04.</span> Output Scheduled Posts & Composited Creative Assets
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Generated campaigns are laid out chronologically. Images and ad creatives render on-demand.</p>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="openAddPostModal()" class="py-2 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm rounded-xl transition-all active:scale-95 flex items-center gap-2">
+            ➕ Add Post
           </button>
+          <div class="flex flex-col text-right">
+            <span class="text-xs text-slate-500 font-bold uppercase">Total Slots</span>
+            <span id="diagnostic-slots" class="text-lg font-black text-white">-</span>
+          </div>
+          <div class="flex flex-col text-right border-l border-slate-800 pl-4">
+            <span class="text-xs text-slate-500 font-bold uppercase">Strategy Pillars</span>
+            <span id="diagnostic-pillars" class="text-lg font-black text-purple-400">-</span>
+          </div>
+          <div class="flex flex-col text-right border-l border-slate-800 pl-4">
+            <span class="text-xs text-slate-500 font-bold uppercase">Processing Time</span>
+            <span id="diagnostic-time" class="text-lg font-black text-emerald-400">-</span>
+          </div>
+          <div class="flex flex-col text-right border-l border-slate-800 pl-4">
+            <span class="text-xs text-slate-500 font-bold uppercase">🎟 Tokens Left</span>
+            <span id="diagnostic-tokens" class="text-lg font-black text-amber-400">-</span>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="addPostDate">Date (YYYY-MM-DD)</label>
-          <input type="date" id="addPostDate" />
         </div>
-        <div class="form-group">
-          <label for="addPostPillar">Content Pillar</label>
-          <input
-            type="text"
-            id="addPostPillar"
-            placeholder="e.g., Behind the Scenes"
-          />
-        </div>
-        <div class="form-group">
-          <label for="addPostTopic">Topic (optional)</label>
-          <input
-            type="text"
-            id="addPostTopic"
-            placeholder="e.g., Coffee brewing process"
-          />
-        </div>
-        <div
-          id="addPostLoading"
-          style="display: none; text-align: center; padding: 20px"
-        >
-          <div class="spinner"></div>
-          <p>Generating new post...</p>
-        </div>
-        <div id="addPostSuccess" class="success-message" style="display: none">
-          Post added successfully!
-        </div>
-        <button class="btn" onclick="addExtraPost()">
-          Generate & Add Post
+      </div>
+
+      <!-- View Switcher Tabs -->
+      <div class="flex border-b border-slate-800 -mt-2">
+        <button onclick="switchView('grid')" id="tab-grid" class="px-5 py-3 text-sm font-bold border-b-2 border-purple-500 text-purple-400 transition-all flex items-center gap-2">
+          🎴 Card Grid
+        </button>
+        <button onclick="switchView('calendar')" id="tab-calendar" class="px-5 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all flex items-center gap-2">
+          📅 Calendar Planner
         </button>
       </div>
-    </div>
 
-    <!-- Edit Prompt Modal -->
-    <div id="editPromptModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Edit Image Prompt</h3>
-          <button class="modal-close" onclick="closeEditPromptModal()">
-            &times;
-          </button>
-        </div>
-        <div class="form-group">
-          <label for="editPromptText">Image Generation Prompt</label>
-          <textarea id="editPromptText" rows="8"></textarea>
-          <p style="color: #666; font-size: 12px; margin-top: 5px">
-            Describe the image you want to generate. Be specific about style,
-            elements, colors, and mood.
-          </p>
-        </div>
-        <button class="btn" onclick="saveEditedPrompt()">
-          Save & Generate Image
-        </button>
+      <!-- Compositor Settings Panel -->
+      <div class="flex flex-wrap items-center gap-4 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 -mt-2">
+        <label class="flex items-center gap-3 cursor-pointer select-none">
+          <input type="checkbox" id="toggle-disable-html" class="w-5 h-5 rounded-lg border-2 border-slate-700 bg-slate-950 text-purple-600 focus:ring-0 focus:ring-offset-0 focus:outline-none cursor-pointer transition-all accent-purple-600" />
+          <span class="text-sm font-bold text-slate-200">Disable HTML Compositor Overlay (Raw Image Only)</span>
+        </label>
+        <div class="w-1.5 h-1.5 rounded-full bg-slate-800 hidden md:block"></div>
+        <span class="text-xs text-slate-400 font-medium">Bypasses Playwright's frosted-glass dynamic typography layout engine to test raw AI backgrounds.</span>
       </div>
-    </div>
 
-    <script>
-      // Detect API URL based on current host
-      const currentHost = window.location.hostname;
-      let API_BASE_URL;
+      <!-- Posts grid list -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="posts-grid-list">
+        <!-- Dynamic Post Cards Injected Here -->
+      </div>
 
-      if (currentHost === "localhost" || currentHost === "127.0.0.1") {
-        API_BASE_URL = "http://localhost:3000";
-      } else if (
-        currentHost.startsWith("192.168") ||
-        currentHost.startsWith("10.")
-      ) {
-        // Use same IP but port 3000
-        API_BASE_URL = `http://${currentHost}:3000`;
-      } else {
-        // Fallback
-        API_BASE_URL = "http://localhost:3000";
-      }
+      <!-- Calendar Planner view -->
+      <div id="posts-calendar-view" class="hidden flex flex-col gap-8">
+        <!-- Calendar Grid Injected Here -->
+      </div>
+    </main>
 
-      console.log("Current Host:", currentHost);
-      console.log("API Base URL:", API_BASE_URL);
+  </div>
 
-      // Tab switching
-      function switchTab(tabName) {
-        // Hide all tabs
-        document.querySelectorAll(".tab-content").forEach((tab) => {
-          tab.classList.remove("active");
-        });
-        document.querySelectorAll(".tab").forEach((tab) => {
-          tab.classList.remove("active");
-        });
+  <!-- JS CONTROLLERS -->
+  <script>
+    const API_BASE = 'http://localhost:3000/api/v1';
+    let activeRunId = null;
+    let activeCampaignId = null;
+    let statusPollingInterval = null;
+    let loadedStages = [];
+    let selectedStageForInspector = null;
+    let startTime = null;
 
-        // Show selected tab
-        document.getElementById(`tab-${tabName}`).classList.add("active");
-        event.target.classList.add("active");
+    // Trigger connections check and registry load at load
+    window.addEventListener('DOMContentLoaded', () => {
+      checkConnections();
+      loadExistingCampaigns();
+      
+      // Default manual dates to today and 14 days later
+      const today = new Date().toISOString().split('T')[0];
+      const end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const startEl = document.getElementById('input-start-date');
+      const endEl = document.getElementById('input-end-date');
+      if (startEl) startEl.value = today;
+      if (endEl) endEl.value = end;
+    });
 
-        // Load cache stats if cache tab
-        if (tabName === "cache") {
-          refreshCacheStats();
-        }
-      }
-
-      // Test API connection
-      async function testAPIConnection() {
-        try {
-          const response = await fetch(`${API_BASE_URL}/health`);
-          const data = await response.json();
-
-          if (data.success) {
-            showSuccessMessage(`✅ API Connected: ${data.data.status}`);
+    async function checkConnections() {
+      // 1. Check API Health
+      const apiStatus = document.getElementById('status-api');
+      const dbStatus = document.getElementById('status-db');
+      
+      try {
+        const res = await fetch('http://localhost:3000/health');
+        if (res.ok) {
+          const data = await res.json();
+          apiStatus.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><span class="text-xs font-semibold text-emerald-400">API Server Online</span>`;
+          
+          if (data.data && data.data.services && data.data.services.database === 'ok') {
+            dbStatus.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><span class="text-xs font-semibold text-emerald-400">Postgres Connected</span>`;
           } else {
-            showError("API responded but reported issues");
+            dbStatus.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span><span class="text-xs font-semibold text-rose-400">DB Disconnected</span>`;
           }
-        } catch (error) {
-          showError(`Failed to connect to API: ${error.message}`);
+        } else {
+          throw new Error('Not OK');
         }
+      } catch (err) {
+        apiStatus.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span><span class="text-xs font-semibold text-rose-400">API Server Offline</span>`;
+        dbStatus.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span><span class="text-xs font-semibold text-rose-400">DB Disconnected</span>`;
+      }
+    }
+
+    async function launchPipeline() {
+      const industry = document.getElementById('input-industry').value.trim();
+      const services = document.getElementById('input-services').value.split(',').map(s => s.trim()).filter(Boolean);
+      const total_days = parseInt(document.getElementById('input-days').value, 10);
+      const frequency_per_week = parseInt(document.getElementById('input-freq').value, 10);
+      const geography = document.getElementById('input-geography').value.trim();
+      const base_color = document.getElementById('input-color-base').value;
+      const startDate = document.getElementById('input-start-date').value;
+      const endDate = document.getElementById('input-end-date').value;
+
+      if (!industry || services.length === 0) {
+        alert('Please fill in the Industry and Services Offered fields.');
+        return;
       }
 
-      // Cache Management Functions
-      async function refreshCacheStats() {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
-          const data = await response.json();
+      const launchBtn = document.getElementById('btn-launch');
+      launchBtn.disabled = true;
+      launchBtn.innerText = 'Creating Campaign Record...';
 
-          if (data.success) {
-            const stats = data.data;
-            document.getElementById("cacheHits").textContent = stats.hits;
-            document.getElementById("cacheMisses").textContent = stats.misses;
-            document.getElementById("cacheHitRate").textContent = stats.hitRate;
-            document.getElementById("cacheSize").textContent = stats.size;
-            document.getElementById("cacheEvictions").textContent =
-              stats.evictions;
-            document.getElementById("cacheSets").textContent = stats.sets;
+      try {
+        startTime = Date.now();
+        // 1. Post request to generate-content (auth bypassed automatically in dev mode!)
+        const res = await fetch(`${API_BASE}/generate-content`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            startDate,
+            endDate,
+            input: {
+              industry,
+              total_days,
+              frequency_per_week,
+              services,
+              geography,
+              base_color,
+              platforms: ['instagram', 'linkedin'],
+              festival_enabled: true
+            }
+          })
+        });
 
-            showSuccessMessage("Cache stats refreshed");
-          }
-        } catch (error) {
-          console.error("Error fetching cache stats:", error);
-          showError("Failed to fetch cache stats");
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || 'Failed to start pipeline');
         }
+
+        activeCampaignId = data.data.campaign_id;
+        console.log(`Campaign created successfully: ${activeCampaignId}`);
+
+        // Reload explorer to show new running campaign in registry list
+        loadExistingCampaigns();
+
+        // Reveal the state machine tracking monitor
+        document.getElementById('monitor-panel').classList.remove('hidden');
+        document.getElementById('output-posts-panel').classList.remove('hidden');
+        
+        // Start polling pipeline-run status
+        await fetchPipelineRunDetails();
+        statusPollingInterval = setInterval(pollRunStatus, 2500);
+
+        launchBtn.innerText = 'Launch Campaign Pipeline';
+        launchBtn.disabled = false;
+
+      } catch (err) {
+        console.error(err);
+        alert(`Generation launch aborted: ${err.message}`);
+        launchBtn.innerText = 'Launch Campaign Pipeline';
+        launchBtn.disabled = false;
       }
+    }
 
-      async function clearCache() {
-        const pattern = document.getElementById("clearPattern").value.trim();
+    async function fetchPipelineRunDetails() {
+      if (!activeCampaignId) return;
 
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/v1/cache/clear`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pattern: pattern || undefined }),
-          });
+      try {
+        const res = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/pipeline-run`);
+        if (!res.ok) throw new Error('Failed to load run details');
 
-          const data = await response.json();
+        const data = await res.json();
+        const run = data.data;
 
-          if (data.success) {
-            const resultDiv = document.getElementById("clearCacheResult");
-            resultDiv.className = "success-message";
-            resultDiv.textContent = data.data.message;
-            resultDiv.style.display = "block";
+        if (!run) return;
 
-            // Refresh stats
-            await refreshCacheStats();
-          }
-        } catch (error) {
-          console.error("Error clearing cache:", error);
-          showError("Failed to clear cache");
+        activeRunId = run.id;
+        document.getElementById('display-run-id').innerText = run.id.slice(0, 18) + '...';
+
+        // Update overall run badge
+        const badge = document.getElementById('overall-status-badge');
+        badge.innerText = run.status;
+        badge.className = `px-3 py-1 text-xs font-bold uppercase rounded-full tracking-wider `;
+        if (run.status === 'RUNNING') {
+          badge.classList.add('bg-purple-500/20', 'text-purple-400', 'border', 'border-purple-500/30', 'pulse-glow');
+        } else if (run.status === 'COMPLETED') {
+          badge.classList.add('bg-emerald-500/20', 'text-emerald-400', 'border', 'border-emerald-500/30');
+          clearInterval(statusPollingInterval);
+          loadCompletedCampaignOutput();
+        } else if (run.status === 'PAUSED') {
+          badge.classList.add('bg-yellow-500/20', 'text-yellow-400', 'border', 'border-yellow-500/30');
+        } else if (run.status === 'FAILED') {
+          badge.classList.add('bg-rose-500/20', 'text-rose-400', 'border', 'border-rose-500/30');
+          clearInterval(statusPollingInterval);
+        } else {
+          badge.classList.add('bg-slate-800', 'text-slate-400', 'border', 'border-slate-700');
         }
+
+        // Timer elapsed
+        if (startTime) {
+          const sec = ((Date.now() - startTime) / 1000).toFixed(1);
+          document.getElementById('elapsed-time').innerText = `${sec}s elapsed`;
+        }
+
+        // Render individual stages
+        loadedStages = run.stages;
+        renderStagesMonitor(run.stages);
+
+      } catch (err) {
+        console.error(err);
       }
+    }
 
-      // Full Cycle Testing
-      const expectations = [
-        {
-          id: "api-health",
-          title: "API Health Check",
-          description: "Verify API server is running and responsive",
-          test: async () => {
-            const response = await fetch(`${API_BASE_URL}/health`);
-            const data = await response.json();
-            return data.success && data.data.status === "ok";
-          },
-        },
-        {
-          id: "generate-campaign",
-          title: "Generate Campaign",
-          description: "Create new campaign with strategy, calendar, and posts",
-          test: async () => {
-            const response = await fetch(
-              `${API_BASE_URL}/api/v1/generate-content`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  input: {
-                    industry: "Coffee Shop",
-                    total_days: 7,
-                    frequency_per_week: 3,
-                    festival_enabled: true,
-                    services: ["Espresso", "Pastries", "Latte Art Classes"],
-                    geography: "India",
-                    logo_url: "https://example.com/logo.png",
-                    font_style: "Roboto",
-                    accent_color: "#667eea",
-                    base_color: "#764ba2",
-                  },
-                }),
-              },
-            );
-            const data = await response.json();
+    async function pollRunStatus() {
+      await fetchPipelineRunDetails();
+    }
 
-            if (data.success) {
-              window.testCampaignId = data.data.campaign_id;
-              window.testPosts = data.data.output.posts;
-              window.testFirstPostId =
-                data.data.output.posts[0].postId ||
-                data.data.output.posts[0].post_id;
-              return (
-                data.data.output.posts.length > 0 &&
-                data.data.summary.strategyPillars > 0
-              );
-            }
-            return false;
-          },
-        },
-        {
-          id: "cache-strategy",
-          title: "Strategy Cached",
-          description: "Verify strategy was cached for reuse",
-          test: async () => {
-            const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
-            const data = await response.json();
-            return data.success && data.data.hits >= 0 && data.data.sets > 0;
-          },
-        },
-        {
-          id: "edit-post",
-          title: "Edit Post Caption",
-          description: "Update post caption and verify changes persist",
-          test: async () => {
-            if (!window.testFirstPostId) return false;
+    function renderStagesMonitor(stages) {
+      const container = document.getElementById('stages-list');
+      container.innerHTML = '';
 
-            const response = await fetch(
-              `${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}`,
-              {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  caption: "EDITED: This caption was updated via API test",
-                }),
-              },
-            );
-            const data = await response.json();
-            return data.success;
-          },
-        },
-        {
-          id: "regenerate-caption",
-          title: "Regenerate Post Caption",
-          description: "Generate new caption using persisted calendar data",
-          test: async () => {
-            if (!window.testFirstPostId) return false;
-
-            const response = await fetch(
-              `${API_BASE_URL}/api/v1/posts/${window.testFirstPostId}/regenerate`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ regenerateImage: false }),
-              },
-            );
-            const data = await response.json();
-            return data.success && data.data.post.caption;
-          },
-        },
-        {
-          id: "add-extra-post",
-          title: "Add Extra Post",
-          description: "Create additional post for specific date",
-          test: async () => {
-            if (!window.testCampaignId) return false;
-
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const dateStr = tomorrow.toISOString().split("T")[0];
-
-            const response = await fetch(
-              `${API_BASE_URL}/api/v1/campaigns/${window.testCampaignId}/posts/add`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  date: dateStr,
-                  pillar: "Behind the Scenes",
-                  topic: "Coffee roasting process",
-                }),
-              },
-            );
-            const data = await response.json();
-
-            if (data.success) {
-              window.testExtraPostId = data.data.post.post_id;
-              return true;
-            }
-            return false;
-          },
-        },
-        {
-          id: "delete-post",
-          title: "Delete Post",
-          description: "Remove post from database",
-          test: async () => {
-            if (!window.testExtraPostId) return false;
-
-            const response = await fetch(
-              `${API_BASE_URL}/api/v1/posts/${window.testExtraPostId}`,
-              {
-                method: "DELETE",
-              },
-            );
-            const data = await response.json();
-            return data.success;
-          },
-        },
-        {
-          id: "cache-hit-rate",
-          title: "Cache Performance",
-          description: "Verify cache is improving performance",
-          test: async () => {
-            const response = await fetch(`${API_BASE_URL}/api/v1/cache/stats`);
-            const data = await response.json();
-
-            if (data.success) {
-              const hitRate = parseFloat(data.data.hitRate);
-              return hitRate >= 0; // Any hit rate is acceptable for test
-            }
-            return false;
-          },
-        },
+      // Define logical display order
+      const displayOrder = [
+        'genieContext',
+        'normalizeInput',
+        'brandIntelligence',
+        'audiencePersona',
+        'platformStrategy',
+        'campaignStrategy',
+        'generateCalendar',
+        'generatePosts'
       ];
 
-      async function runFullCycleTests() {
-        const progressDiv = document.getElementById("testProgress");
-        const expectationsDiv = document.getElementById("testExpectations");
-        const summaryDiv = document.getElementById("testSummary");
-
-        progressDiv.style.display = "block";
-        summaryDiv.style.display = "none";
-        expectationsDiv.innerHTML = "";
-
-        // Create expectation items
-        expectations.forEach((exp) => {
-          const item = document.createElement("div");
-          item.className = "expectation-item";
-          item.id = `exp-${exp.id}`;
-          item.innerHTML = `
-            <div class="expectation-status pending" id="status-${exp.id}">⏳</div>
-            <div class="expectation-details">
-              <div class="expectation-title">${exp.title}</div>
-              <div class="expectation-desc">${exp.description}</div>
-            </div>
-            <div class="expectation-time" id="time-${exp.id}">-</div>
-          `;
-          expectationsDiv.appendChild(item);
-        });
-
-        let passed = 0;
-        let failed = 0;
-        const startTime = Date.now();
-
-        // Run tests sequentially
-        for (const exp of expectations) {
-          const statusEl = document.getElementById(`status-${exp.id}`);
-          const timeEl = document.getElementById(`time-${exp.id}`);
-
-          statusEl.className = "expectation-status testing";
-          statusEl.textContent = "⏳";
-
-          const testStart = Date.now();
-
-          try {
-            const result = await exp.test();
-            const duration = Date.now() - testStart;
-
-            if (result) {
-              statusEl.className = "expectation-status passed";
-              statusEl.textContent = "✅";
-              timeEl.textContent = `${duration}ms`;
-              passed++;
-            } else {
-              statusEl.className = "expectation-status failed";
-              statusEl.textContent = "❌";
-              timeEl.textContent = `${duration}ms`;
-              failed++;
-            }
-          } catch (error) {
-            console.error(`Test ${exp.id} failed:`, error);
-            const duration = Date.now() - testStart;
-            statusEl.className = "expectation-status failed";
-            statusEl.textContent = "❌";
-            timeEl.textContent = `${duration}ms (error)`;
-            failed++;
-          }
-
-          // Small delay between tests
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-
-        const totalTime = Date.now() - startTime;
-
-        // Show summary
-        summaryDiv.style.display = "block";
-        const summaryContent = document.getElementById("testSummaryContent");
-        summaryContent.innerHTML = `
-          <div class="summary-stats">
-            <div class="stat">
-              <div class="stat-value" style="color: #4caf50">${passed}</div>
-              <div class="stat-label">Passed</div>
-            </div>
-            <div class="stat">
-              <div class="stat-value" style="color: #f44336">${failed}</div>
-              <div class="stat-label">Failed</div>
-            </div>
-            <div class="stat">
-              <div class="stat-value">${expectations.length}</div>
-              <div class="stat-label">Total Tests</div>
-            </div>
-            <div class="stat">
-              <div class="stat-value">${(totalTime / 1000).toFixed(2)}s</div>
-              <div class="stat-label">Total Time</div>
-            </div>
-          </div>
-          <div style="margin-top: 20px; text-align: center;">
-            <strong>Success Rate:</strong> ${((passed / expectations.length) * 100).toFixed(1)}%
-          </div>
-        `;
-
-        summaryDiv.scrollIntoView({ behavior: "smooth" });
-      }
-
-      async function generateContent() {
-        // Get form values
-        const industry = document.getElementById("industry").value.trim();
-        const total_days = parseInt(
-          document.getElementById("total_days").value,
-        );
-        const frequency_per_week = parseInt(
-          document.getElementById("frequency").value,
-        );
-        const geography = document.getElementById("geography").value;
-        const festival_enabled =
-          document.getElementById("festival_enabled").checked;
-
-        // Get services
-        const serviceInputs = document.querySelectorAll(".service-input");
-        const services = Array.from(serviceInputs)
-          .map((input) => input.value.trim())
-          .filter((val) => val !== "");
-
-        // Validate
-        if (!industry) {
-          showError("Please enter your industry/business type");
-          return;
-        }
-
-        if (services.length === 0) {
-          showError("Please enter at least one service");
-          return;
-        }
-
-        // Hide previous results
-        document.getElementById("error").style.display = "none";
-        document.getElementById("results").style.display = "none";
-        document.getElementById("loading").style.display = "block";
-
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/generate-content`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                input: {
-                  industry,
-                  total_days,
-                  frequency_per_week,
-                  festival_enabled,
-                  services,
-                  geography,
-                  logo_url: "https://example.com/logo.png",
-                  font_style: "Roboto",
-                  accent_color: "#667eea",
-                  base_color: "#764ba2",
-                },
-              }),
-            },
-          );
-
-          const data = await response.json();
-
-          if (data.success) {
-            displayResults(data.data);
-          } else {
-            showError(data.error.message);
-          }
-        } catch (error) {
-          console.error("API Error:", error);
-          let errorMessage = `Failed to connect to API: ${error.message}`;
-
-          if (error.message === "Failed to fetch") {
-            errorMessage =
-              `Cannot connect to API server at ${API_BASE_URL}.\n\n` +
-              `Please make sure:\n` +
-              `1. The server is running (npm run dev)\n` +
-              `2. You're accessing the demo from the same machine as the server\n` +
-              `3. Try opening: http://localhost:5500/demo.html instead`;
-          }
-
-          showError(errorMessage);
-        } finally {
-          document.getElementById("loading").style.display = "none";
-        }
-      }
-
-      function displayResults(data) {
-        // Store campaign ID globally for adding extra posts
-        window.currentCampaignId = data.campaign_id;
-
-        // Update summary stats
-        document.getElementById("totalPosts").textContent =
-          data.summary.totalPosts;
-        document.getElementById("strategyPillars").textContent =
-          data.summary.strategyPillars;
-        document.getElementById("festivalPosts").textContent =
-          data.summary.festivalPosts;
-        document.getElementById("processingTime").textContent =
-          (data.summary.processingTime / 1000).toFixed(1) + "s";
-
-        // Display posts
-        const postsContainer = document.getElementById("postsContainer");
-        postsContainer.innerHTML = "";
-
-        data.output.posts.forEach((post, index) => {
-          const postCard = document.createElement("div");
-          postCard.className = "post-card";
-          const postId = post.postId || post.post_id; // Handle both formats
-          postCard.id = `post-${postId}`;
-
-          // Handle all possible field name variations for image prompt
-          let imagePrompt =
-            post.detailedImagePrompt ||
-            post.detailed_image_prompt ||
-            post.imagePrompt ||
-            post.image_prompt ||
-            post.metadata?.detailedImagePrompt ||
-            post.metadata?.detailed_image_prompt ||
-            "";
-
-          // Check if prompt is actually empty or null
-          if (!imagePrompt || imagePrompt.trim() === "") {
-            imagePrompt = "No image prompt available";
-          }
-
-          // Debug log to see what we're getting
-          console.log(`Post ${index + 1}:`, {
-            postId,
-            detailedImagePrompt: post.detailedImagePrompt,
-            detailed_image_prompt: post.detailed_image_prompt,
-            finalPrompt: imagePrompt,
-          });
-
-          postCard.innerHTML = `
-          <img src="${post.imageUrl}" alt="Generated post ${index + 1}" class="post-image" id="img-${postId}" />
-          <div class="post-content">
-            <div class="post-date">Post ${index + 1} • ${formatDate(post.scheduledDate)}</div>
-            <div class="post-caption" id="caption-${postId}">${post.caption}</div>
-            <div class="hashtags">
-              ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
-            </div>
-            
-            <div class="image-prompt-section">
-              <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
-                <h5>🎨 Image Prompt</h5>
-                <span class="toggle-icon" id="toggle-${postId}">▼</span>
-              </div>
-              <div class="image-prompt-content" id="prompt-content-${postId}">
-                <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
-                <div class="image-actions">
-                  <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
-                  <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
-                  <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
-                </div>
-              </div>
-            </div>
-            
-            <div class="post-management">
-              <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
-              <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
-              <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
-              <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
-            </div>
-          </div>
-        `;
-
-          postsContainer.appendChild(postCard);
-        });
-
-        // Add "Add Extra Post" button at the end
-        const addPostCard = document.createElement("div");
-        addPostCard.className = "post-card";
-        addPostCard.style.display = "flex";
-        addPostCard.style.alignItems = "center";
-        addPostCard.style.justifyContent = "center";
-        addPostCard.style.cursor = "pointer";
-        addPostCard.onclick = openAddPostModal;
-        addPostCard.innerHTML = `
-          <div style="text-align: center; padding: 40px;">
-            <div style="font-size: 48px; margin-bottom: 10px;">➕</div>
-            <div style="font-size: 18px; color: #667eea;">Add Extra Post</div>
-          </div>
-        `;
-        postsContainer.appendChild(addPostCard);
-
-        document.getElementById("results").style.display = "block";
-
-        // Scroll to results
-        document
-          .getElementById("results")
-          .scrollIntoView({ behavior: "smooth" });
-      }
-
-      function showError(message) {
-        const errorDiv = document.getElementById("error");
-        errorDiv.innerHTML = `<strong>Error:</strong><br>${message.replace(/\n/g, "<br>")}`;
-        errorDiv.style.display = "block";
-        errorDiv.scrollIntoView({ behavior: "smooth" });
-      }
-
-      // Test API connection on page load
-      window.addEventListener("load", async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/health`, {
-            method: "GET",
-          });
-          if (response.ok) {
-            console.log("✓ API connection successful");
-          } else {
-            console.warn(
-              "⚠ API responded but with error status:",
-              response.status,
-            );
-          }
-        } catch (error) {
-          console.error("✗ Cannot connect to API:", error.message);
-          console.log("Make sure the server is running: npm run dev");
-        }
+      // Sort stages according to chronological STAGE_ORDER
+      const sorted = displayOrder.map(name => {
+        return stages.find(s => s.stageName === name) || { stageName: name, status: 'PENDING' };
       });
 
-      function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        });
-      }
+      sorted.forEach((stage, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700 rounded-2xl p-4 transition-all cursor-pointer ${selectedStageForInspector === stage.stageName ? 'ring-2 ring-purple-500 border-purple-500' : ''}`;
+        itemDiv.onclick = () => selectStage(stage);
 
-      // Helper function to escape quotes for HTML attributes
-      function escapeQuotes(text) {
-        return text.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-      }
-
-      // Post Management Functions
-      let currentEditingPostId = null;
-
-      function editPostUI(postId, currentCaption) {
-        currentEditingPostId = postId;
-        document.getElementById("editCaption").value = currentCaption
-          .replace(/\\'/g, "'")
-          .replace(/&quot;/g, '"');
-        document.getElementById("editModal").style.display = "flex";
-      }
-
-      function closeEditModal() {
-        document.getElementById("editModal").style.display = "none";
-        currentEditingPostId = null;
-      }
-
-      async function saveEditedPost() {
-        if (!currentEditingPostId) return;
-
-        const newCaption = document.getElementById("editCaption").value.trim();
-        if (!newCaption) {
-          alert("Caption cannot be empty");
-          return;
-        }
-
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/posts/${currentEditingPostId}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                caption: newCaption,
-              }),
-            },
-          );
-
-          const data = await response.json();
-
-          if (data.success) {
-            // Update caption in UI
-            const captionElement = document.getElementById(
-              `caption-${currentEditingPostId}`,
-            );
-            captionElement.textContent = newCaption;
-
-            // Show success message
-            showSuccessMessage("Caption updated successfully!");
-            closeEditModal();
-          } else {
-            alert("Failed to update post: " + data.error.message);
-          }
-        } catch (error) {
-          console.error("Error updating post:", error);
-          alert("Failed to update post: " + error.message);
-        }
-      }
-
-      async function regeneratePostUI(postId, withImage) {
-        const action = withImage
-          ? "Regenerating caption and image"
-          : "Regenerating caption";
-        const postCard = document.getElementById(`post-${postId}`);
-
-        // Show loading indicator
-        const originalContent = postCard.innerHTML;
-        postCard.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
-            <div style="text-align: center;">
-              <div class="spinner"></div>
-              <p style="margin-top: 20px; color: #667eea;">${action}...</p>
+        // Stage Title
+        const leftBox = document.createElement('div');
+        leftBox.className = 'flex items-center gap-3';
+        leftBox.innerHTML = `
+          <div class="w-8 h-8 rounded-lg bg-slate-850 flex items-center justify-center border border-slate-800 text-xs font-bold text-slate-500">
+            ${index + 1}
+          </div>
+          <div>
+            <div class="text-sm font-bold text-white font-mono">${stage.stageName}</div>
+            <div class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+              ${stage.attemptCount > 0 ? `Attempts: ${stage.attemptCount}/3` : 'Ready to execute'}
             </div>
           </div>
         `;
 
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/posts/${postId}/regenerate`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                regenerateImage: withImage,
-              }),
-            },
-          );
+        // Stage Badge
+        const rightBox = document.createElement('div');
+        rightBox.className = 'flex items-center gap-3';
 
-          const data = await response.json();
-
-          if (data.success) {
-            const post = data.data.post;
-            const imagePrompt =
-              post.detailed_image_prompt || "No image prompt available";
-
-            // Update the post card with new content
-            postCard.innerHTML = `
-              <img src="${post.image_url}?t=${Date.now()}" alt="Regenerated post" class="post-image" id="img-${postId}" />
-              <div class="post-content">
-                <div class="post-date">${formatDate(post.scheduled_date)}</div>
-                <div class="post-caption" id="caption-${postId}">${post.caption}</div>
-                <div class="hashtags">
-                  ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
-                </div>
-                
-                <div class="image-prompt-section">
-                  <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
-                    <h5>🎨 Image Prompt</h5>
-                    <span class="toggle-icon" id="toggle-${postId}">▼</span>
-                  </div>
-                  <div class="image-prompt-content" id="prompt-content-${postId}">
-                    <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
-                    <div class="image-actions">
-                      <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
-                      <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
-                      <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="post-management">
-                  <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
-                  <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
-                  <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
-                  <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
-                </div>
-              </div>
-            `;
-
-            showSuccessMessage("Post regenerated successfully!");
-          } else {
-            postCard.innerHTML = originalContent;
-            alert("Failed to regenerate post: " + data.error.message);
-          }
-        } catch (error) {
-          console.error("Error regenerating post:", error);
-          postCard.innerHTML = originalContent;
-          alert("Failed to regenerate post: " + error.message);
-        }
-      }
-
-      async function deletePostUI(postId) {
-        if (
-          !confirm(
-            "Are you sure you want to delete this post? This action cannot be undone.",
-          )
-        ) {
-          return;
-        }
-
-        const postCard = document.getElementById(`post-${postId}`);
-
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/posts/${postId}`,
-            {
-              method: "DELETE",
-            },
-          );
-
-          const data = await response.json();
-
-          if (data.success) {
-            // Fade out and remove the post card
-            postCard.style.transition = "opacity 0.3s";
-            postCard.style.opacity = "0";
-
-            setTimeout(() => {
-              postCard.remove();
-
-              // Update total posts count
-              const totalPostsElement = document.getElementById("totalPosts");
-              const currentCount = parseInt(totalPostsElement.textContent);
-              totalPostsElement.textContent = currentCount - 1;
-
-              showSuccessMessage("Post deleted successfully!");
-            }, 300);
-          } else {
-            alert("Failed to delete post: " + data.error.message);
-          }
-        } catch (error) {
-          console.error("Error deleting post:", error);
-          alert("Failed to delete post: " + error.message);
-        }
-      }
-
-      function openAddPostModal() {
-        console.log("Opening Add Post Modal...");
-
-        // Set today's date as default
-        const today = new Date().toISOString().split("T")[0];
-
-        const modal = document.getElementById("addPostModal");
-        if (!modal) {
-          console.error("Modal element not found!");
-          alert("Error: Modal element not found. Please refresh the page.");
-          return;
-        }
-
-        document.getElementById("addPostDate").value = today;
-        document.getElementById("addPostPillar").value = "";
-        document.getElementById("addPostTopic").value = "";
-        document.getElementById("addPostLoading").style.display = "none";
-        document.getElementById("addPostSuccess").style.display = "none";
-        modal.style.display = "flex";
-
-        console.log("Modal should now be visible");
-      }
-
-      function closeAddPostModal() {
-        document.getElementById("addPostModal").style.display = "none";
-      }
-
-      async function addExtraPost() {
-        const date = document.getElementById("addPostDate").value;
-        const pillar = document.getElementById("addPostPillar").value.trim();
-        const topic = document.getElementById("addPostTopic").value.trim();
-
-        if (!date) {
-          alert("Please select a date");
-          return;
-        }
-
-        if (!pillar) {
-          alert("Please enter a content pillar");
-          return;
-        }
-
-        if (!window.currentCampaignId) {
-          alert("No campaign ID found. Please generate content first.");
-          return;
-        }
-
-        // Show loading
-        document.getElementById("addPostLoading").style.display = "block";
-        document.getElementById("addPostSuccess").style.display = "none";
-
-        try {
-          const requestBody = {
-            date: date,
-            pillar: pillar,
-          };
-
-          if (topic) {
-            requestBody.topic = topic;
-          }
-
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/campaigns/${window.currentCampaignId}/posts/add`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(requestBody),
-            },
-          );
-
-          const data = await response.json();
-
-          if (data.success) {
-            const post = data.data.post;
-
-            // Add new post card to the grid (before the "Add Post" button)
-            const postsContainer = document.getElementById("postsContainer");
-            const addPostButton = postsContainer.lastElementChild;
-
-            const newPostCard = document.createElement("div");
-            newPostCard.className = "post-card";
-            newPostCard.id = `post-${post.post_id}`;
-            newPostCard.innerHTML = `
-              <img src="${post.image_url}" alt="New post" class="post-image" />
-              <div class="post-content">
-                <div class="post-date">${formatDate(post.scheduled_date)}</div>
-                <div class="post-caption" id="caption-${post.post_id}">${post.caption}</div>
-                <div class="hashtags">
-                  ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
-                </div>
-                <div class="post-management">
-                  <button class="btn-small" onclick="editPostUI('${post.post_id}', '${escapeQuotes(post.caption)}')">✏️ Edit</button>
-                  <button class="btn-small success" onclick="regeneratePostUI('${post.post_id}', false)">🔄 Regenerate Caption</button>
-                  <button class="btn-small success" onclick="regeneratePostUI('${post.post_id}', true)">🖼️ Regenerate All</button>
-                  <button class="btn-small danger" onclick="deletePostUI('${post.post_id}')">🗑️ Delete</button>
-                </div>
-              </div>
-            `;
-
-            postsContainer.insertBefore(newPostCard, addPostButton);
-
-            // Update total posts count
-            const totalPostsElement = document.getElementById("totalPosts");
-            const currentCount = parseInt(totalPostsElement.textContent);
-            totalPostsElement.textContent = currentCount + 1;
-
-            // Show success and close modal after 2 seconds
-            document.getElementById("addPostLoading").style.display = "none";
-            document.getElementById("addPostSuccess").style.display = "block";
-
-            setTimeout(() => {
-              closeAddPostModal();
-
-              // Scroll to new post
-              newPostCard.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-              });
-            }, 1500);
-          } else {
-            document.getElementById("addPostLoading").style.display = "none";
-            alert("Failed to add post: " + data.error.message);
-          }
-        } catch (error) {
-          console.error("Error adding post:", error);
-          document.getElementById("addPostLoading").style.display = "none";
-          alert("Failed to add post: " + error.message);
-        }
-      }
-
-      function showSuccessMessage(message) {
-        const successDiv = document.createElement("div");
-        successDiv.className = "success-message";
-        successDiv.textContent = message;
-        successDiv.style.position = "fixed";
-        successDiv.style.top = "20px";
-        successDiv.style.right = "20px";
-        successDiv.style.zIndex = "10000";
-
-        document.body.appendChild(successDiv);
-
-        setTimeout(() => {
-          successDiv.style.opacity = "0";
-          setTimeout(() => successDiv.remove(), 300);
-        }, 3000);
-      }
-
-      // Close modals when clicking outside
-      window.onclick = function (event) {
-        const editModal = document.getElementById("editModal");
-        const addPostModal = document.getElementById("addPostModal");
-        const editPromptModal = document.getElementById("editPromptModal");
-
-        if (event.target === editModal) {
-          closeEditModal();
-        }
-        if (event.target === addPostModal) {
-          closeAddPostModal();
-        }
-        if (event.target === editPromptModal) {
-          closeEditPromptModal();
-        }
-      };
-
-      // Image Prompt Functions
-      function togglePrompt(postId) {
-        const content = document.getElementById(`prompt-content-${postId}`);
-        const icon = document.getElementById(`toggle-${postId}`);
-
-        if (content.classList.contains("collapsed")) {
-          content.classList.remove("collapsed");
-          icon.classList.remove("collapsed");
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ';
+        if (stage.status === 'COMPLETED') {
+          statusSpan.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+        } else if (stage.status === 'RUNNING') {
+          statusSpan.classList.add('bg-purple-500/10', 'text-purple-400', 'border-purple-500/20', 'pulse-glow');
+        } else if (stage.status === 'OVERRIDDEN') {
+          statusSpan.classList.add('bg-indigo-500/10', 'text-indigo-400', 'border-indigo-500/20');
+        } else if (stage.status === 'FAILED') {
+          statusSpan.classList.add('bg-rose-500/10', 'text-rose-400', 'border-rose-500/20');
         } else {
-          content.classList.add("collapsed");
-          icon.classList.add("collapsed");
+          statusSpan.classList.add('bg-slate-900', 'text-slate-500', 'border-slate-800');
         }
-      }
+        statusSpan.innerText = stage.status;
 
-      let currentEditingPromptPostId = null;
+        rightBox.appendChild(statusSpan);
 
-      function editPromptUI(postId, currentPrompt) {
-        currentEditingPromptPostId = postId;
-        document.getElementById("editPromptText").value = currentPrompt
-          .replace(/\\'/g, "'")
-          .replace(/&quot;/g, '"');
-        document.getElementById("editPromptModal").style.display = "flex";
-      }
-
-      function closeEditPromptModal() {
-        document.getElementById("editPromptModal").style.display = "none";
-        currentEditingPromptPostId = null;
-      }
-
-      async function saveEditedPrompt() {
-        if (!currentEditingPromptPostId) return;
-
-        const newPrompt = document
-          .getElementById("editPromptText")
-          .value.trim();
-        if (!newPrompt) {
-          alert("Prompt cannot be empty");
-          return;
-        }
-
-        // Close modal and show loading
-        closeEditPromptModal();
-
-        const postCard = document.getElementById(
-          `post-${currentEditingPromptPostId}`,
-        );
-        const originalHTML = postCard.innerHTML;
-
-        postCard.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
-            <div style="text-align: center;">
-              <div class="spinner"></div>
-              <p style="margin-top: 20px; color: #667eea;">Generating image with new prompt...</p>
+        // Action info
+        if (stage.status === 'COMPLETED' || stage.status === 'OVERRIDDEN') {
+          rightBox.innerHTML += `
+            <div class="text-slate-600 hover:text-slate-400 transition-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </div>
-          </div>
-        `;
+          `;
+        }
 
+        itemDiv.appendChild(leftBox);
+        itemDiv.appendChild(rightBox);
+        container.appendChild(itemDiv);
+      });
+    }
+
+    function selectStage(stage) {
+      selectedStageForInspector = stage.stageName;
+      document.getElementById('inspector-stage-label').innerText = stage.stageName;
+
+      const editor = document.getElementById('json-inspector');
+      const overrideBtn = document.getElementById('btn-override');
+
+      if (stage.outputJson) {
+        editor.value = JSON.stringify(stage.outputJson, null, 2);
+        overrideBtn.disabled = false;
+      } else {
+        editor.value = `// Stage '${stage.stageName}' has no output payload yet.\n// Current status: ${stage.status}\n${stage.errorMessage ? `// Error: ${stage.errorMessage}` : ''}`;
+        overrideBtn.disabled = true;
+      }
+
+      // Re-render stages list to highlight active selection ring
+      renderStagesMonitor(loadedStages);
+    }
+
+    function clearInspector() {
+      document.getElementById('json-inspector').value = '';
+      document.getElementById('inspector-stage-label').innerText = 'Select a Stage';
+      document.getElementById('btn-override').disabled = true;
+      selectedStageForInspector = null;
+      renderStagesMonitor(loadedStages);
+    }
+
+    async function submitOverride() {
+      if (!activeCampaignId || !selectedStageForInspector) return;
+
+      const jsonText = document.getElementById('json-inspector').value;
+      let parsed = null;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (err) {
+        alert('Invalid JSON formatting! Check your syntax before submitting.');
+        return;
+      }
+
+      const overrideBtn = document.getElementById('btn-override');
+      overrideBtn.disabled = true;
+      overrideBtn.innerText = 'Applying Override...';
+
+      try {
+        const res = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/stages/${selectedStageForInspector}/override`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            outputJson: parsed
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || 'Override application rejected');
+        }
+
+        alert(`✓ Manual override applied successfully to stage: ${selectedStageForInspector}.\nDownstream stages have been reset back to PENDING. Click "Resume" to restart.`);
+        
+        // Stop polling temporarily to reload state
+        clearInterval(statusPollingInterval);
+        await fetchPipelineRunDetails();
+        statusPollingInterval = setInterval(pollRunStatus, 2500);
+
+      } catch (err) {
+        alert(`Override failed: ${err.message}`);
+      } finally {
+        overrideBtn.innerText = 'Apply Manual Stage Override';
+        overrideBtn.disabled = false;
+      }
+    }
+
+    async function resumeRun() {
+      if (!activeCampaignId) return;
+
+      const resumeBtn = document.getElementById('btn-resume');
+      resumeBtn.disabled = true;
+      resumeBtn.innerText = 'Resuming...';
+
+      try {
+        const res = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/pipeline-run/resume`, {
+          method: 'POST'
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || 'Resumption failed');
+
+        console.log('Orchestrator pipeline resumed.');
+        
+        // Restart polling
+        clearInterval(statusPollingInterval);
+        await fetchPipelineRunDetails();
+        statusPollingInterval = setInterval(pollRunStatus, 2500);
+
+      } catch (err) {
+        alert(`Resume failed: ${err.message}`);
+      } finally {
+        resumeBtn.disabled = false;
+        resumeBtn.innerText = 'Resume Execution';
+      }
+    }
+
+    async function loadCompletedCampaignOutput() {
+      if (!activeCampaignId) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/posts`);
+        if (!res.ok) throw new Error('Failed to load generated posts');
+
+        const data = await res.json();
+        const posts = data.data.posts;
+
+        // Render diagnostics metrics
+        document.getElementById('diagnostic-slots').innerText = posts.length;
+        
+        const strategyRes = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/pipeline-run`);
+        const runData = await strategyRes.json();
+        const campaignStrategy = runData.data.stages.find(s => s.stageName === 'campaignStrategy')?.outputJson;
+        
+        document.getElementById('diagnostic-pillars').innerText = campaignStrategy?.content_pillars?.length || '3';
+
+        if (startTime) {
+          document.getElementById('diagnostic-time').innerText = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
+        }
+
+        // Fetch token balance
         try {
-          // First update the prompt in the database
-          const updateResponse = await fetch(
-            `${API_BASE_URL}/api/v1/posts/${currentEditingPromptPostId}`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ imagePrompt: newPrompt }),
-            },
-          );
-
-          if (!updateResponse.ok) {
-            throw new Error("Failed to update prompt");
+          const tokRes = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/tokens`);
+          if (tokRes.ok) {
+            const tokData = await tokRes.json();
+            const bal = tokData.data?.balance ?? '-';
+            const el = document.getElementById('diagnostic-tokens');
+            if (el) {
+              el.innerText = bal;
+              el.className = `text-lg font-black ${bal === 0 ? 'text-rose-400' : 'text-amber-400'}`;
+            }
           }
+        } catch (_) {}
 
-          // Then generate image with the new prompt
-          await generateImageWithPrompt(currentEditingPromptPostId, newPrompt);
-        } catch (error) {
-          console.error("Error updating prompt:", error);
-          postCard.innerHTML = originalHTML;
-          showError(
-            "Failed to update prompt and generate image: " + error.message,
-          );
-        }
+        renderPostCards(posts);
+        renderCalendarPlanner(posts);
+
+      } catch (err) {
+        console.error(err);
       }
+    }
 
-      async function generateImageWithPrompt(postId, customPrompt = null) {
-        const imgElement = document.getElementById(`img-${postId}`);
-        const promptElement = document.getElementById(`prompt-${postId}`);
-        const prompt = customPrompt || promptElement?.textContent || "";
+    function switchView(view) {
+      const gridList = document.getElementById('posts-grid-list');
+      const calendarView = document.getElementById('posts-calendar-view');
+      const tabGrid = document.getElementById('tab-grid');
+      const tabCalendar = document.getElementById('tab-calendar');
 
-        if (!prompt || prompt === "No image prompt available") {
-          alert(
-            "No image prompt available. Please regenerate the post to get a new prompt.",
-          );
-          return;
-        }
+      if (view === 'grid') {
+        gridList.classList.remove('hidden');
+        calendarView.classList.add('hidden');
+        
+        tabGrid.classList.remove('border-transparent', 'text-slate-400');
+        tabGrid.classList.add('border-purple-500', 'text-purple-400');
+        
+        tabCalendar.classList.remove('border-purple-500', 'text-purple-400');
+        tabCalendar.classList.add('border-transparent', 'text-slate-400');
+      } else {
+        gridList.classList.add('hidden');
+        calendarView.classList.remove('hidden');
+        
+        tabGrid.classList.remove('border-purple-500', 'text-purple-400');
+        tabGrid.classList.add('border-transparent', 'text-slate-400');
+        
+        tabCalendar.classList.remove('border-transparent', 'text-slate-400');
+        tabCalendar.classList.add('border-purple-500', 'text-purple-400');
+      }
+    }
 
-        const postCard = document.getElementById(`post-${postId}`);
-        const originalHTML = postCard.innerHTML;
+    function scrollToPostCard(postId) {
+      switchView('grid');
+      
+      const cardEl = document.getElementById('card-' + postId);
+      if (cardEl) {
+        // Smooth scroll to card
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Flash border highlight effect
+        cardEl.classList.remove('border-slate-800');
+        cardEl.classList.add('ring-4', 'ring-purple-500', 'border-purple-500');
+        
+        setTimeout(() => {
+          cardEl.classList.remove('ring-4', 'ring-purple-500', 'border-purple-500');
+          cardEl.classList.add('border-slate-800');
+        }, 2000);
+      }
+    }
 
-        postCard.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
-            <div style="text-align: center;">
-              <div class="spinner"></div>
-              <p style="margin-top: 20px; color: #667eea;">Generating image...</p>
-              <p style="color: #999; margin-top: 10px;">This may take 10-30 seconds</p>
-            </div>
+    function renderCalendarPlanner(posts) {
+      const container = document.getElementById('posts-calendar-view');
+      container.innerHTML = '';
+
+      if (!posts || posts.length === 0) {
+        container.innerHTML = `
+          <div class="text-xs text-slate-500 font-semibold italic text-center py-8 bg-slate-900/30 border border-slate-850 rounded-2xl">
+            No scheduled posts to display in calendar.
           </div>
         `;
+        return;
+      }
 
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/posts/${postId}/generate-image`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt: prompt }),
-            },
-          );
+      // Group posts by YYYY-MM-DD
+      const postsByDate = {};
+      posts.forEach(post => {
+        if (!post.scheduledDate) return;
+        const dateStr = post.scheduledDate.substring(0, 10);
+        if (!postsByDate[dateStr]) {
+          postsByDate[dateStr] = [];
+        }
+        postsByDate[dateStr].push(post);
+      });
 
-          const data = await response.json();
+      // Find all unique months represented in the scheduled posts
+      const uniqueMonths = {};
+      Object.keys(postsByDate).forEach(dateStr => {
+        const parts = dateStr.split('-');
+        if (parts.length < 2) return;
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1; // 0-indexed for JavaScript Date
+        const monthKey = `${year}-${month}`;
+        if (!uniqueMonths[monthKey]) {
+          uniqueMonths[monthKey] = { year, month, dates: [] };
+        }
+        uniqueMonths[monthKey].dates.push(dateStr);
+      });
 
-          if (data.success) {
-            // Reload the post from server to get updated data
-            const postResponse = await fetch(
-              `${API_BASE_URL}/api/v1/posts/${postId}`,
-            );
-            const postData = await postResponse.json();
+      // Sort months chronologically
+      const sortedMonthKeys = Object.keys(uniqueMonths).sort((a, b) => {
+        const [yA, mA] = a.split('-').map(Number);
+        const [yB, mB] = b.split('-').map(Number);
+        return yA !== yB ? yA - yB : mA - mB;
+      });
 
-            if (postData.success) {
-              const post = postData.data;
-              const imagePrompt =
-                post.detailed_image_prompt || "No image prompt available";
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June", 
+        "July", "August", "September", "October", "November", "December"
+      ];
 
-              postCard.innerHTML = `
-                <img src="${post.image_url}?t=${Date.now()}" alt="Generated post" class="post-image" id="img-${postId}" />
-                <div class="post-content">
-                  <div class="post-date">${formatDate(post.scheduled_date)}</div>
-                  <div class="post-caption" id="caption-${postId}">${post.caption}</div>
-                  <div class="hashtags">
-                    ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
+      sortedMonthKeys.forEach(monthKey => {
+        const { year, month } = uniqueMonths[monthKey];
+        
+        // Month container
+        const monthSection = document.createElement('div');
+        monthSection.className = 'glass-panel rounded-3xl p-6 border border-slate-800/80 shadow-md flex flex-col gap-4';
+        
+        // Title: e.g. "May 2026"
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'text-lg font-bold text-white border-b border-slate-800 pb-3 flex justify-between items-center';
+        titleDiv.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+            ${monthNames[month]} ${year}
+          </div>
+          <span class="text-xs text-slate-400 font-medium font-mono">${uniqueMonths[monthKey].dates.length} Posting Days</span>
+        `;
+        monthSection.appendChild(titleDiv);
+
+        // Days of week header grid
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'grid grid-cols-7 gap-3 mt-1';
+        
+        const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        weekdays.forEach(dayName => {
+          const header = document.createElement('div');
+          header.className = 'text-center font-bold text-xs text-slate-500 uppercase font-mono py-1.5 border-b border-slate-850/50';
+          header.innerText = dayName;
+          gridContainer.appendChild(header);
+        });
+
+        // Calculate calendar parameters
+        const firstDay = new Date(year, month, 1);
+        const startDayOfWeek = firstDay.getDay(); // 0 (Sun) to 6 (Sat)
+        const totalDays = new Date(year, month + 1, 0).getDate();
+
+        // Render leading padding empty boxes
+        for (let i = 0; i < startDayOfWeek; i++) {
+          const emptyCell = document.createElement('div');
+          emptyCell.className = 'min-h-[120px] bg-slate-900/10 border border-slate-900/40 opacity-20 rounded-2xl';
+          gridContainer.appendChild(emptyCell);
+        }
+
+        // Render actual days of the month
+        for (let day = 1; day <= totalDays; day++) {
+          const dayCell = document.createElement('div');
+          dayCell.className = 'min-h-[140px] bg-slate-900/30 border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3 flex flex-col gap-2 transition-all';
+          
+          // Day number header
+          const dayNum = document.createElement('div');
+          dayNum.className = 'text-xs font-bold text-slate-400 font-mono self-start';
+          dayNum.innerText = day;
+          dayCell.appendChild(dayNum);
+
+          // Get YYYY-MM-DD key for this day
+          const yyyy = year;
+          const mm = String(month + 1).padStart(2, '0');
+          const dd = String(day).padStart(2, '0');
+          const dateString = `${yyyy}-${mm}-${dd}`;
+
+          const dayPosts = postsByDate[dateString] || [];
+          
+          // Sort posts by time if available
+          dayPosts.sort((a, b) => {
+            const timeA = a.scheduledTime || '10:00';
+            const timeB = b.scheduledTime || '10:00';
+            return timeA.localeCompare(timeB);
+          });
+
+          if (dayPosts.length > 0) {
+            dayCell.classList.add('bg-slate-900/60');
+            
+            const postsList = document.createElement('div');
+            postsList.className = 'flex flex-col gap-1.5 overflow-y-auto custom-scrollbar flex-1';
+
+            dayPosts.forEach(post => {
+              const postItem = document.createElement('div');
+              postItem.onclick = (e) => {
+                e.stopPropagation();
+                scrollToPostCard(post.id || post.postId || post.entryId);
+              };
+              postItem.className = 'group flex flex-col gap-1 p-2 rounded-xl bg-slate-950/60 hover:bg-purple-900/20 border border-slate-850 hover:border-purple-500/50 cursor-pointer transition-all shrink-0';
+              
+              const hasImage = !!post.imageUrl;
+              const isIG = post.platform === 'instagram';
+              
+              postItem.innerHTML = `
+                <div class="flex items-center justify-between gap-1">
+                  <div class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full shrink-0 ${hasImage ? 'bg-emerald-500' : 'bg-yellow-500'}" title="${hasImage ? 'Image rendered' : 'Image pending on-demand composite'}"></span>
+                    <span class="text-[8px] font-bold font-mono tracking-wider px-1 py-0.2 rounded-md ${isIG ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'} uppercase">
+                      ${isIG ? 'IG' : 'LN'}
+                    </span>
                   </div>
-                  
-                  <div class="image-prompt-section">
-                    <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
-                      <h5>🎨 Image Prompt</h5>
-                      <span class="toggle-icon" id="toggle-${postId}">▼</span>
-                    </div>
-                    <div class="image-prompt-content" id="prompt-content-${postId}">
-                      <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
-                      <div class="image-actions">
-                        <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
-                        <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
-                        <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div class="post-management">
-                    <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
-                    <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
-                    <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
-                    <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
-                  </div>
+                  <span class="text-[8px] text-slate-500 font-mono">${post.scheduledTime || '10:00'}</span>
+                </div>
+                <div class="text-[9px] font-bold text-slate-200 truncate leading-tight group-hover:text-purple-300">
+                  ${post.metadata?.topic || post.topic || 'Campaign Post'}
                 </div>
               `;
-
-              showSuccessMessage("Image generated successfully!");
-            }
+              postsList.appendChild(postItem);
+            });
+            dayCell.appendChild(postsList);
           } else {
-            postCard.innerHTML = originalHTML;
-            alert("Failed to generate image: " + data.error.message);
+            dayCell.classList.add('opacity-45');
           }
-        } catch (error) {
-          console.error("Error generating image:", error);
-          postCard.innerHTML = originalHTML;
-          alert("Failed to generate image: " + error.message);
-        }
-      }
 
-      async function regenerateImagePrompt(postId) {
-        if (
-          !confirm(
-            "This will generate a new image prompt and create a new image. Continue?",
-          )
-        ) {
-          return;
+          gridContainer.appendChild(dayCell);
         }
 
-        const postCard = document.getElementById(`post-${postId}`);
-        const originalHTML = postCard.innerHTML;
+        // Render trailing padding empty boxes to complete the 7-column grid rows if needed
+        const totalCellsSoFar = startDayOfWeek + totalDays;
+        const remainder = totalCellsSoFar % 7;
+        if (remainder > 0) {
+          const trailingPadding = 7 - remainder;
+          for (let i = 0; i < trailingPadding; i++) {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'min-h-[120px] bg-slate-900/10 border border-slate-900/40 opacity-20 rounded-2xl';
+            gridContainer.appendChild(emptyCell);
+          }
+        }
 
-        postCard.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 400px;">
-            <div style="text-align: center;">
-              <div class="spinner"></div>
-              <p style="margin-top: 20px; color: #667eea;">Generating new prompt and image...</p>
-              <p style="color: #999; margin-top: 10px;">This may take 15-40 seconds</p>
+        monthSection.appendChild(gridContainer);
+        container.appendChild(monthSection);
+      });
+    }
+
+    function renderPostCards(posts) {
+      const container = document.getElementById('posts-grid-list');
+      container.innerHTML = '';
+
+      posts.forEach(post => {
+        const card = document.createElement('div');
+        card.id = 'card-' + (post.id || post.postId || post.entryId);
+        card.className = 'glass-panel rounded-3xl overflow-hidden border border-slate-800 shadow-lg flex flex-col justify-between hover:border-slate-700 transition-all';
+
+        
+        // Image Header or Fallback
+        const imgBlock = document.createElement('div');
+        imgBlock.className = 'relative w-full h-64 bg-slate-950 flex flex-col items-center justify-center overflow-hidden border-b border-slate-800/80';
+        
+        const isPostVideo = post.mediaType === 'video' || (post.imageUrl && post.imageUrl.includes('.mp4'));
+        const isPostVideoType = ['reel', 'story'].includes((post.contentType || '').toLowerCase());
+        
+        if (post.imageUrl) {
+          if (isPostVideo) {
+            imgBlock.innerHTML = `
+              <video src="${post.imageUrl}" class="w-full h-full object-cover" controls playsinline muted></video>
+              <span class="absolute top-3 left-3 px-2 py-0.5 bg-slate-900/80 border border-slate-700/50 text-[10px] font-bold text-slate-300 rounded-full font-mono">VIDEO RENDERED</span>
+              <button onclick="generateAdImage('${post.id || post.postId || post.entryId}', this)" class="absolute top-3 right-3 p-2 bg-slate-900/90 hover:bg-purple-600 border border-slate-700/50 hover:border-purple-500 text-slate-300 hover:text-white rounded-xl shadow-lg active:scale-95 transition-all" title="Regenerate/Re-composite Video">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+              </button>
+            `;
+          } else {
+            imgBlock.innerHTML = `
+              <img src="${post.imageUrl}" class="w-full h-full object-cover" />
+              <span class="absolute top-3 left-3 px-2 py-0.5 bg-slate-900/80 border border-slate-700/50 text-[10px] font-bold text-slate-300 rounded-full font-mono">IMAGE RENDERED</span>
+              <button onclick="generateAdImage('${post.id || post.postId || post.entryId}', this)" class="absolute top-3 right-3 p-2 bg-slate-900/90 hover:bg-purple-600 border border-slate-700/50 hover:border-purple-500 text-slate-300 hover:text-white rounded-xl shadow-lg active:scale-95 transition-all" title="Regenerate/Re-composite Image">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+              </button>
+            `;
+          }
+        } else {
+          if (isPostVideoType) {
+            imgBlock.innerHTML = `
+              <div class="flex flex-col items-center justify-center p-6 text-center">
+                <div class="w-12 h-12 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center text-slate-400 mb-3 animate-pulse">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                </div>
+                <div class="text-xs font-bold text-slate-400">Ad Video Not Generated Yet</div>
+                <div class="text-[10px] text-slate-600 mt-1 max-w-[200px] font-medium leading-relaxed">Kling AI video assets are rendered on-demand for B2C/B2B storytelling.</div>
+              </div>
+              <button onclick="generateAdImage('${post.id || post.postId || post.entryId}', this)" class="absolute bottom-3 py-2 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-lg shadow-md active:scale-95 transition-all">
+                Composite Video On-Demand
+              </button>
+            `;
+          } else {
+            imgBlock.innerHTML = `
+              <div class="flex flex-col items-center justify-center p-6 text-center">
+                <div class="w-12 h-12 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center text-slate-400 mb-3 animate-pulse">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </div>
+                <div class="text-xs font-bold text-slate-400">Ad Creative Not Generated Yet</div>
+                <div class="text-[10px] text-slate-600 mt-1 max-w-[200px] font-medium leading-relaxed">Playwright composites render on-demand to optimize tokens.</div>
+              </div>
+              <button onclick="generateAdImage('${post.id || post.postId || post.entryId}', this)" class="absolute bottom-3 py-2 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-lg shadow-md active:scale-95 transition-all">
+                Composite Image On-Demand
+              </button>
+            `;
+          }
+        }
+
+        // Body Content
+        const bodyBlock = document.createElement('div');
+        bodyBlock.className = 'p-6 flex flex-col gap-4 flex-1';
+
+        // Scheduled Time & Meta
+        let dateVal = '';
+        if (post.scheduledDate) {
+          if (typeof post.scheduledDate === 'string') {
+            dateVal = post.scheduledDate.substring(0, 10);
+          } else {
+            const d = new Date(post.scheduledDate);
+            const year = d.getUTCFullYear();
+            const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            dateVal = `${year}-${month}-${day}`;
+          }
+        } else {
+          dateVal = new Date().toISOString().split('T')[0];
+        }
+
+        let timeVal = post.scheduledTime || '10:00';
+        if (timeVal.includes(':')) {
+          const [h, m] = timeVal.split(':');
+          timeVal = `${h.padStart(2, '0')}:${(m || '00').padStart(2, '0')}`;
+        }
+        
+        bodyBlock.innerHTML = `
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 text-xs font-bold text-slate-500 font-mono bg-slate-950/40 p-2.5 rounded-xl border border-slate-900">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[10px] text-slate-500">📅</span>
+              <input type="date" value="${dateVal}" onchange="updatePostScheduleInfo('${post.id || post.postId || post.entryId}', this.value, null)" 
+                     class="bg-transparent hover:bg-slate-900 border-0 focus:ring-0 text-slate-300 font-bold w-28 text-xs cursor-pointer focus:outline-none rounded transition-all font-mono py-0.5 px-1" />
+              <span class="text-[10px] text-slate-500">@</span>
+              <input type="time" value="${timeVal}" onchange="updatePostScheduleInfo('${post.id || post.postId || post.entryId}', null, this.value)" 
+                     class="bg-transparent hover:bg-slate-900 border-0 focus:ring-0 text-slate-300 font-bold w-16 text-xs cursor-pointer focus:outline-none rounded transition-all font-mono py-0.5 px-1" />
+            </div>
+            <span class="text-purple-400 uppercase tracking-widest text-[9px] bg-purple-500/10 border border-purple-500/25 px-2 py-0.5 rounded-full shrink-0">${post.platform}</span>
+            <span class="uppercase tracking-widest text-[9px] px-2 py-0.5 rounded-full shrink-0 border ${
+              ['reel','story'].includes((post.contentType||'').toLowerCase())
+                ? 'bg-pink-500/10 border-pink-500/25 text-pink-400'
+                : 'bg-slate-800 border-slate-700 text-slate-400'
+            }">${(post.contentType||'photo').toUpperCase()}</span>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-bold text-white leading-snug">${post.metadata?.topic || post.topic || 'Campaign Post'}</h4>
+            <p class="text-xs text-slate-400 font-semibold tracking-wider font-mono mt-1 text-[10px]">PILLAR: ${post.metadata?.contentPillar || post.contentPillar || 'Brand Connect'}</p>
+          </div>
+
+          <div class="bg-slate-950/40 border border-slate-900/60 rounded-xl p-3.5 flex flex-col gap-3">
+            <p class="text-xs text-slate-300 leading-relaxed custom-scrollbar max-h-24 overflow-y-auto">${post.caption || 'No caption copy available.'}</p>
+            <div class="flex flex-wrap gap-1.5 border-t border-slate-900/80 pt-2.5">
+              ${(post.hashtags || []).map(tag => `<span class="text-[10px] text-blue-400 font-semibold font-mono bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">${tag}</span>`).join('')}
             </div>
           </div>
         `;
 
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/api/v1/posts/${postId}/regenerate`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ regenerateImage: true }),
-            },
-          );
+        if (post.callToAction) {
+          bodyBlock.innerHTML += `
+            <div class="flex items-center gap-2 bg-slate-900/50 border border-slate-800/80 px-3 py-2 rounded-xl text-xs text-slate-400">
+              <span class="font-bold text-[10px] uppercase text-emerald-400 tracking-wider">CTA:</span>
+              <span class="font-medium">${post.callToAction}</span>
+            </div>
+          `;
+        }
 
-          const data = await response.json();
+        // Actions Footer Block
+        const footerBlock = document.createElement('div');
+        footerBlock.className = 'px-6 pb-6 pt-4 border-t border-slate-900 flex justify-between items-center gap-3 bg-slate-950/20 mt-auto';
 
-          if (data.success) {
-            const post = data.data.post;
-            const imagePrompt =
-              post.detailed_image_prompt || "No image prompt available";
+        let statusColor = 'bg-slate-900 border-slate-800 text-slate-400';
+        if (post.status === 'POSTED') statusColor = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+        else if (post.status === 'PUBLISHING') statusColor = 'bg-purple-500/10 border-purple-500/20 text-purple-400 animate-pulse';
+        else if (post.status === 'APPROVED' || post.status === 'SCHEDULED') statusColor = 'bg-blue-500/10 border-blue-500/20 text-blue-400';
+        else if (post.status === 'FAILED') statusColor = 'bg-rose-500/10 border-rose-500/20 text-rose-400';
 
-            postCard.innerHTML = `
-              <img src="${post.image_url}?t=${Date.now()}" alt="Regenerated post" class="post-image" id="img-${postId}" />
-              <div class="post-content">
-                <div class="post-date">${formatDate(post.scheduled_date)}</div>
-                <div class="post-caption" id="caption-${postId}">${post.caption}</div>
-                <div class="hashtags">
-                  ${post.hashtags.map((tag) => `<span class="hashtag">${tag}</span>`).join("")}
-                </div>
-                
-                <div class="image-prompt-section">
-                  <div class="image-prompt-header" onclick="togglePrompt('${postId}')">
-                    <h5>🎨 Image Prompt</h5>
-                    <span class="toggle-icon" id="toggle-${postId}">▼</span>
-                  </div>
-                  <div class="image-prompt-content" id="prompt-content-${postId}">
-                    <div class="image-prompt-text" id="prompt-${postId}">${imagePrompt}</div>
-                    <div class="image-actions">
-                      <button class="btn-small" onclick="generateImageWithPrompt('${postId}')">🖼️ Generate Image</button>
-                      <button class="btn-small success" onclick="regenerateImagePrompt('${postId}')">✨ New Prompt & Image</button>
-                      <button class="btn-small" onclick="editPromptUI('${postId}', '${escapeQuotes(imagePrompt)}')">✏️ Edit Prompt</button>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="post-management">
-                  <button class="btn-small" onclick="editPostUI('${postId}', '${escapeQuotes(post.caption)}')">✏️ Edit Caption</button>
-                  <button class="btn-small success" onclick="regeneratePostUI('${postId}', false)">🔄 Regenerate Caption</button>
-                  <button class="btn-small success" onclick="regeneratePostUI('${postId}', true)">🖼️ Regenerate All</button>
-                  <button class="btn-small danger" onclick="deletePostUI('${postId}')">🗑️ Delete</button>
-                </div>
-              </div>
-            `;
+        let actionButtonHtml = '';
+        if (post.status === 'POSTED') {
+          const isLI = post.platform === 'linkedin';
+          const link = isLI && post.platformPostId 
+            ? `https://www.linkedin.com/feed/update/${post.platformPostId}` 
+            : '#';
+          actionButtonHtml = isLI && post.platformPostId
+            ? `<a href="${link}" target="_blank" class="py-2 px-4 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 hover:border-blue-500 text-blue-400 hover:text-blue-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1">🔗 View Post</a>`
+            : `<span class="text-xs font-bold text-emerald-400">✓ Published</span>`;
+        } else if (post.status === 'PUBLISHING') {
+          actionButtonHtml = `<span class="text-xs font-bold text-purple-400 animate-pulse">⚡ Publishing...</span>`;
+        } else if (post.status === 'APPROVED' || post.status === 'SCHEDULED') {
+          actionButtonHtml = `<span class="text-xs font-bold text-blue-400">✓ Approved & Scheduled</span>`;
+        } else {
+          actionButtonHtml = `<button onclick="approvePostLive('${post.id || post.postId || post.entryId}', this)" class="py-2 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95">✅ Approve Post</button>`;
+        }
 
-            showSuccessMessage("New prompt and image generated successfully!");
-          } else {
-            postCard.innerHTML = originalHTML;
-            alert("Failed to regenerate: " + data.error.message);
-          }
-        } catch (error) {
-          console.error("Error regenerating:", error);
-          postCard.innerHTML = originalHTML;
-          alert("Failed to regenerate: " + error.message);
+        footerBlock.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">Status:</span>
+            <span class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase border ${statusColor}">${post.status || 'DRAFT'}</span>
+          </div>
+          <div>
+            ${actionButtonHtml}
+          </div>
+        `;
+
+        card.appendChild(imgBlock);
+        card.appendChild(bodyBlock);
+        card.appendChild(footerBlock);
+        container.appendChild(card);
+      });
+    }
+
+    async function generateAdImage(postId, buttonEl) {
+      buttonEl.disabled = true;
+      const disableHtml = document.getElementById('toggle-disable-html')?.checked || false;
+      
+      // Determine if it is the small refresh button or the main block button
+      const isIconBtn = buttonEl.tagName.toLowerCase() === 'button' && buttonEl.querySelector('svg');
+      const originalHtml = buttonEl.innerHTML;
+      
+      let styleParam = '';
+      let feedback = '';
+      
+      if (!disableHtml && isIconBtn) {
+        const userFeedback = prompt("AI Post Refinement:\nEnter your steering feedback/directions to regenerate the post's caption and background scene (e.g., 'focus on hydration benefits of hyaluronic acid', 'use a serene garden theme'):\n\nLeave empty to just re-composite/regenerate the visual layout:");
+        if (userFeedback !== null) {
+          feedback = userFeedback.trim();
         }
       }
-    </script>
-  </body>
+
+      if (isIconBtn) {
+        buttonEl.innerHTML = `<svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>`;
+      } else {
+        buttonEl.innerText = disableHtml ? 'Generating Raw Image...' : 'Analyzing & Compositing...';
+      }
+
+      try {
+        if (feedback) {
+          if (!isIconBtn) {
+            buttonEl.innerText = 'Regenerating Post...';
+          }
+          
+          const templateStyle = styleParam ? styleParam.split('=')[1] : undefined;
+          const res = await fetch(`http://localhost:3000/api/v1/posts/${postId}/regenerate`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              regenerateCaption: true,
+              regeneratePrompt: true,
+              regenerateImage: true,
+              feedback: feedback,
+              templateStyle: templateStyle
+            })
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error(data.message || 'Media regeneration failed');
+
+          console.log(`Media regenerated successfully with feedback for post ${postId}`);
+        } else {
+          const res = await fetch(`http://localhost:3000/api/v1/posts/${postId}/generate-video?disableHtml=${disableHtml}${styleParam}`, {
+            method: 'POST'
+          });
+
+          const data = await res.json();
+          if (res.status === 402) {
+            alert(`🎟 Out of regeneration tokens!\n\nYour campaign has used all available tokens.\nContact support or use the admin grant endpoint to add more.`);
+            buttonEl.disabled = false;
+            if (isIconBtn) buttonEl.innerHTML = originalHtml;
+            else buttonEl.innerText = 'Composite Image On-Demand';
+            return;
+          }
+          if (!res.ok || !data.success) throw new Error(data.message || 'Media generation failed');
+
+          console.log(`Media generated successfully for post ${postId} (disableHtml: ${disableHtml})`);
+        }
+
+        await loadCompletedCampaignOutput();
+
+      } catch (err) {
+        alert(`Generation failed: ${err.message}`);
+        if (isIconBtn) {
+          buttonEl.innerHTML = originalHtml;
+        } else {
+          buttonEl.innerText = 'Composite Image On-Demand';
+        }
+        buttonEl.disabled = false;
+      }
+    }
+
+    async function publishPostLive(postId, buttonEl) {
+      buttonEl.disabled = true;
+      const originalText = buttonEl.innerText;
+      buttonEl.innerText = 'Enqueuing...';
+
+      try {
+        const res = await fetch(`http://localhost:3000/api/v1/posts/${postId}/publish`, {
+          method: 'POST'
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || 'Publish trigger failed');
+
+        console.log(`Post enqueued for immediate publishing: ${postId}`);
+        buttonEl.innerText = 'Publishing...';
+        
+        // Trigger a database refresh to immediately show PUBLISHING or POSTED
+        setTimeout(loadCompletedCampaignOutput, 2500);
+        setTimeout(loadCompletedCampaignOutput, 6000);
+        
+      } catch (err) {
+        alert(`Publish failed: ${err.message}`);
+        buttonEl.innerText = originalText;
+        buttonEl.disabled = false;
+      }
+    }
+
+    async function approvePostLive(postId, buttonEl) {
+      buttonEl.disabled = true;
+      const originalText = buttonEl.innerText;
+      buttonEl.innerText = 'Approving...';
+
+      try {
+        const res = await fetch(`http://localhost:3000/api/v1/posts/${postId}/approve`, {
+          method: 'POST'
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || 'Approval failed');
+
+        console.log(`Post approved successfully: ${postId}`);
+        buttonEl.innerText = 'Approved';
+        
+        // Refresh outputs immediately to show the APPROVED status badge
+        await loadCompletedCampaignOutput();
+        
+      } catch (err) {
+        alert(`Approval failed: ${err.message}`);
+        buttonEl.innerText = originalText;
+        buttonEl.disabled = false;
+      }
+    }
+
+    async function updatePostScheduleInfo(postId, newDate, newTime) {
+      const payload = {};
+      if (newDate) payload.scheduledDate = newDate;
+      if (newTime) payload.scheduledTime = newTime;
+
+      try {
+        const res = await fetch(`http://localhost:3000/api/v1/posts/${postId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update schedule');
+
+        console.log(`Successfully updated post schedule for ${postId}`);
+        
+        // Refresh calendar view in the background so it syncs up
+        await loadCompletedCampaignOutput();
+      } catch (err) {
+        alert(`Failed to save schedule change: ${err.message}`);
+      }
+    }
+
+    async function loadExistingCampaigns() {
+      const listContainer = document.getElementById('campaigns-registry-list');
+      
+      try {
+        const res = await fetch(`${API_BASE}/campaigns`);
+        if (!res.ok) throw new Error('Failed to load campaigns');
+        
+        const data = await res.json();
+        const campaigns = data.data.campaigns || [];
+        
+        if (campaigns.length === 0) {
+          listContainer.innerHTML = `
+            <div class="text-xs text-slate-500 font-semibold italic text-center py-4 bg-slate-900/30 border border-slate-850 rounded-2xl">
+              No existing campaigns found. Create one using the form below!
+            </div>
+          `;
+          return;
+        }
+        
+        listContainer.innerHTML = campaigns.map(campaign => {
+          const isSelected = activeCampaignId === campaign.id;
+          const letter = campaign.industry ? campaign.industry[0].toUpperCase() : 'C';
+          const dateStr = new Date(campaign.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const postsCount = campaign._count?.posts || 0;
+          
+          let statusStyle = 'bg-purple-500/10 text-purple-400 border-purple-500/25';
+          let avatarStyle = 'from-purple-600/20 to-indigo-600/20 text-purple-400 border border-purple-500/20';
+          if (campaign.status === 'READY') {
+            statusStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25';
+            avatarStyle = 'from-emerald-600/20 to-teal-600/20 text-emerald-400 border border-emerald-500/20';
+          } else if (campaign.status === 'FAILED') {
+            statusStyle = 'bg-rose-500/10 text-rose-400 border-rose-500/25';
+            avatarStyle = 'from-rose-600/20 to-pink-600/20 text-rose-400 border border-rose-500/20';
+          }
+          
+          return `
+            <div class="flex items-center justify-between gap-3 bg-slate-900/50 hover:bg-slate-900 border ${isSelected ? 'ring-2 ring-purple-500 border-purple-500 bg-slate-900' : 'border-slate-800/80 hover:border-slate-700'} rounded-2xl p-3 transition-all">
+              <div class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onclick="selectCampaign('${campaign.id}')">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br ${avatarStyle} flex items-center justify-center font-bold text-sm shrink-0">
+                  ${letter}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-bold text-white truncate leading-tight">${campaign.name || campaign.industry}</div>
+                  <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-500 font-semibold font-mono">
+                    <span>📅 ${dateStr}</span>
+                    <span>•</span>
+                    <span>${postsCount} posts</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${statusStyle}">${campaign.status}</span>
+                <button onclick="deleteCampaign('${campaign.id}', event)" class="p-2 bg-slate-800/80 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-900/50 rounded-xl transition-all text-slate-400 hover:text-rose-400" title="Delete Campaign">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+      } catch (err) {
+        console.error(err);
+        listContainer.innerHTML = `
+          <div class="text-xs text-rose-400 font-semibold italic text-center py-4 bg-rose-900/10 border border-rose-950 rounded-2xl">
+            Failed to pull campaigns: ${err.message}
+          </div>
+        `;
+      }
+    }
+
+    async function selectCampaign(campaignId) {
+      if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+        statusPollingInterval = null;
+      }
+      
+      activeCampaignId = campaignId;
+      console.log(`Loading campaign explorer for ID: ${campaignId}`);
+      
+      // Highlight selected campaign in registry
+      loadExistingCampaigns();
+      
+      // Reveal monitor and output panels
+      document.getElementById('monitor-panel').classList.remove('hidden');
+      document.getElementById('output-posts-panel').classList.remove('hidden');
+      
+      startTime = null; // Clear timer reference for loaded historical runs
+      
+      // Fetch pipeline run details immediately
+      await fetchPipelineRunDetails();
+      
+      // Check current status and start polling if it's active
+      const res = await fetch(`${API_BASE}/campaigns/${campaignId}/pipeline-run`);
+      if (res.ok) {
+        const data = await res.json();
+        const run = data.data;
+        if (run && (run.status === 'RUNNING' || run.status === 'PENDING')) {
+          startTime = Date.now();
+          statusPollingInterval = setInterval(pollRunStatus, 2500);
+        } else if (run && run.status === 'COMPLETED') {
+          await loadCompletedCampaignOutput();
+        } else {
+          // Still load posts and tokens even for non-completed runs
+          try {
+            const postsRes = await fetch(`${API_BASE}/campaigns/${campaignId}/posts`);
+            if (postsRes.ok) {
+              const postsData = await postsRes.json();
+              if (postsData.data?.posts?.length > 0) {
+                renderPostCards(postsData.data.posts);
+                document.getElementById('diagnostic-slots').innerText = postsData.data.posts.length;
+              }
+            }
+          } catch (_) {}
+          // Fetch token balance
+          try {
+            const tokRes = await fetch(`${API_BASE}/campaigns/${campaignId}/tokens`);
+            if (tokRes.ok) {
+              const tokData = await tokRes.json();
+              const bal = tokData.data?.balance ?? '-';
+              const el = document.getElementById('diagnostic-tokens');
+              if (el) { el.innerText = bal; el.className = `text-lg font-black ${bal === 0 ? 'text-rose-400' : 'text-amber-400'}`; }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    async function deleteCampaign(campaignId, event) {
+      if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+      
+      if (!confirm('Are you absolutely sure you want to permanently delete this test campaign run?\nThis will cascade delete all scheduled posts, generated ad creatives, and state machine runs from the database.')) {
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API_BASE}/campaigns/${campaignId}`, {
+          method: 'DELETE'
+        });
+        
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.message || 'Deletion failed');
+        
+        console.log(`Campaign ${campaignId} deleted successfully.`);
+        
+        // If active campaign was deleted, hide panels
+        if (activeCampaignId === campaignId) {
+          if (statusPollingInterval) {
+            clearInterval(statusPollingInterval);
+            statusPollingInterval = null;
+          }
+          activeCampaignId = null;
+          document.getElementById('monitor-panel').classList.add('hidden');
+          document.getElementById('output-posts-panel').classList.add('hidden');
+          clearInspector();
+        }
+        
+        await loadExistingCampaigns();
+        
+      } catch (err) {
+        alert(`Deletion failed: ${err.message}`);
+      }
+    }
+  </script>
+
+  <!-- ADD POST MODAL -->
+  <div id="add-post-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div class="glass-panel rounded-3xl p-7 w-full max-w-lg border border-slate-700 shadow-2xl flex flex-col gap-5">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="text-lg font-bold text-white">➕ Add Post to Campaign</h3>
+        <button onclick="closeAddPostModal()" class="text-slate-400 hover:text-white text-xl font-bold transition-all">✕</button>
+      </div>
+
+      <!-- Mode toggle -->
+      <div class="flex gap-2 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+        <button id="mode-ai" onclick="setAddPostMode('ai')" class="flex-1 py-2 text-xs font-bold rounded-lg bg-purple-600 text-white transition-all">🤖 AI Generate</button>
+        <button id="mode-manual" onclick="setAddPostMode('manual')" class="flex-1 py-2 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition-all">✍️ Manual</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Date *</label>
+          <input type="date" id="ap-date" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Time</label>
+          <input type="time" id="ap-time" value="10:00" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Platform *</label>
+          <select id="ap-platform" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500">
+            <option value="instagram">Instagram</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="whatsapp">WhatsApp</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Content Type</label>
+          <select id="ap-content-type" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500">
+            <option value="photo">Photo</option>
+            <option value="reel">Reel</option>
+            <option value="story">Story</option>
+            <option value="carousel">Carousel</option>
+            <option value="written">Written</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- AI mode fields -->
+      <div id="ap-ai-fields" class="flex flex-col gap-3">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Topic / Theme *</label>
+          <input type="text" id="ap-topic" placeholder="e.g. Benefits of Vitamin C for skin" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Content Pillar (optional)</label>
+          <input type="text" id="ap-pillar" placeholder="e.g. Product Education" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+        </div>
+      </div>
+
+      <!-- Manual mode fields -->
+      <div id="ap-manual-fields" class="hidden flex flex-col gap-3">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Caption</label>
+          <textarea id="ap-caption" rows="3" placeholder="Write your post caption..." class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500 resize-none"></textarea>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Hashtags (comma separated)</label>
+          <input type="text" id="ap-hashtags" placeholder="#skincare, #beauty" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-400">Call to Action</label>
+          <input type="text" id="ap-cta" placeholder="Shop now, Learn more..." class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500" />
+        </div>
+      </div>
+
+      <button onclick="submitAddPost()" id="ap-submit-btn" class="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold rounded-2xl transition-all active:scale-[0.98] shadow-lg">
+        Create Post
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let addPostMode = 'ai';
+
+    function openAddPostModal() {
+      if (!activeCampaignId) { alert('Please load or create a campaign first.'); return; }
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('ap-date').value = today;
+      document.getElementById('add-post-modal').classList.remove('hidden');
+    }
+
+    function closeAddPostModal() {
+      document.getElementById('add-post-modal').classList.add('hidden');
+    }
+
+    function setAddPostMode(mode) {
+      addPostMode = mode;
+      document.getElementById('ap-ai-fields').classList.toggle('hidden', mode !== 'ai');
+      document.getElementById('ap-manual-fields').classList.toggle('hidden', mode !== 'manual');
+      document.getElementById('mode-ai').className = `flex-1 py-2 text-xs font-bold rounded-lg transition-all ${mode === 'ai' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`;
+      document.getElementById('mode-manual').className = `flex-1 py-2 text-xs font-bold rounded-lg transition-all ${mode === 'manual' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`;
+    }
+
+    async function submitAddPost() {
+      const date = document.getElementById('ap-date').value;
+      const time = document.getElementById('ap-time').value;
+      const platform = document.getElementById('ap-platform').value;
+      const contentType = document.getElementById('ap-content-type').value;
+
+      if (!date) { alert('Please select a date.'); return; }
+
+      const btn = document.getElementById('ap-submit-btn');
+      btn.disabled = true;
+      btn.innerText = 'Creating...';
+
+      try {
+        let res, data;
+
+        if (addPostMode === 'ai') {
+          const topic = document.getElementById('ap-topic').value.trim();
+          const pillar = document.getElementById('ap-pillar').value.trim();
+          if (!topic) { alert('Please enter a topic.'); btn.disabled = false; btn.innerText = 'Create Post'; return; }
+
+          res = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/calendar/${date}/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, pillar: pillar || undefined, platform, contentType, scheduledTime: time })
+          });
+        } else {
+          const caption = document.getElementById('ap-caption').value.trim();
+          const hashtags = document.getElementById('ap-hashtags').value.trim();
+          const cta = document.getElementById('ap-cta').value.trim();
+
+          const formData = new FormData();
+          formData.append('platform', platform);
+          formData.append('contentType', contentType);
+          formData.append('scheduledTime', time);
+          if (caption) formData.append('caption', caption);
+          if (hashtags) formData.append('hashtags', hashtags);
+          if (cta) formData.append('callToAction', cta);
+
+          res = await fetch(`${API_BASE}/campaigns/${activeCampaignId}/calendar/${date}/post`, {
+            method: 'POST',
+            body: formData
+          });
+        }
+
+        data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error?.message || data.message || 'Failed to create post');
+
+        closeAddPostModal();
+        await loadCompletedCampaignOutput();
+        alert(`✅ Post created for ${date} at ${time}!`);
+
+      } catch (err) {
+        alert(`Failed: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Create Post';
+      }
+    }
+  </script>
+
+</body>
 </html>

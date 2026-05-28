@@ -12,19 +12,10 @@
  * - Festival integration
  */
 
-import OpenAI from 'openai';
 import { ContentInput, Strategy, CampaignPhase } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { isTopicDuplicate } from '../db/database';
-import { geminiClient } from '../utils/geminiAdapter';
-
-// Use Gemini adapter (configured for Groq) if LLM_PROVIDER is set, otherwise use OpenAI
-const client = process.env.LLM_PROVIDER === 'gemini' 
-  ? geminiClient 
-  : new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      baseURL: process.env.OPENAI_BASE_URL,
-    });
+import { callLlm } from '../utils/llmClient';
 
 interface TopicRequest {
   dayNumber: number;
@@ -163,8 +154,8 @@ export async function generateTopic(
     try {
       const prompt = buildTopicPrompt(input, strategy, request);
 
-      const completion = await client.chat.completions.create({
-        model: process.env.LLM_MODEL || 'gpt-4-turbo-preview',
+      const completion = await callLlm({
+        model: process.env.TOPIC_MODEL || process.env.LLM_MODEL || 'llama-3.1-8b-instant',
         max_tokens: 150,
         temperature: 0.8 + (attempts * 0.1), // Increase temperature on retries for more variety
         messages: [
@@ -205,16 +196,7 @@ export async function generateTopic(
 
       return topic;
     } catch (error: any) {
-      // Handle rate limit errors with exponential backoff
-      if (error?.status === 429 || error?.code === 'rate_limit_exceeded') {
-        const backoffDelay = Math.pow(2, attempts) * 1000; // 1s, 2s, 4s
-        console.warn(`[generateTopic] ⚠ Rate limit hit, backing off ${backoffDelay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, backoffDelay));
-        attempts++;
-        continue;
-      }
-      
-      console.error('[generateTopic] ✗ Topic generation failed:', error);
+      console.error('[generateTopic] ✗ Topic generation attempt failed:', error.message);
       
       attempts++;
       if (attempts >= maxRetries) {
@@ -248,30 +230,23 @@ export async function generateTopicsBatch(
   requests: TopicRequest[],
   campaignId?: string
 ): Promise<string[]> {
-  console.log(`[generateTopics] Generating ${requests.length} topics in parallel`);
+  console.log(`[generateTopics] Generating ${requests.length} topics sequentially to guarantee absolute uniqueness...`);
 
-  // OPTIMIZED: Increased from 10 to 20 for better throughput
-  // OpenAI allows ~60 requests/sec, so 20 parallel is safe
-  const chunkSize = 20;
   const results: string[] = [];
 
-  for (let i = 0; i < requests.length; i += chunkSize) {
-    const chunk = requests.slice(i, i + chunkSize);
+  for (let i = 0; i < requests.length; i++) {
+    const req = requests[i];
     
-    const chunkResults = await Promise.all(
-      chunk.map((req) => generateTopic(input, strategy, req, campaignId))
-    );
-    
-    results.push(...chunkResults);
-    
-    // Adaptive delay between chunks (rate limit management)
-    if (i + chunkSize < requests.length) {
-      const delay = calculateAdaptiveDelay(chunkResults.length);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
+    // Dynamically feed all previously generated topics in this run into previousTopics
+    // to strictly prevent duplicates across different days of the campaign!
+    req.previousTopics = [...(req.previousTopics || []), ...results];
+
+    console.log(`  Generating topic for Day ${req.dayNumber} (${i + 1}/${requests.length})...`);
+    const topic = await generateTopic(input, strategy, req, campaignId);
+    results.push(topic);
   }
 
-  console.log(`[generateTopics] ✓ Generated ${results.length} topics`);
+  console.log(`[generateTopics] ✓ Generated ${results.length} unique, duplicate-free topics`);
   return results;
 }
 
