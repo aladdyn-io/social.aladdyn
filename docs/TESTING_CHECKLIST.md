@@ -375,6 +375,37 @@ WHERE ce.campaign_id = 'test-id';
 
 ---
 
+## 🧪 Pipeline V2 & Ad Compositor Integration Tests
+
+### 9. Staged Pipeline Resumability & Overrides
+- [ ] Initialize campaign and verify `PipelineRun` status starts at `PENDING`.
+- [ ] Run strategy stage and verify `PipelineStageOutput` status is `COMPLETED` and has `outputJson`.
+- [ ] Test human override endpoint `POST /api/v1/campaigns/:campaignId/stages/generateStrategy/override` and verify downstream stages (`generateCalendar`, `generatePosts`) are reset back to `PENDING` status.
+- [ ] Resume pipeline run and verify it picks up exactly at the `generateCalendar` stage and uses the overridden strategy JSON.
+
+### 10. Playwright 3D Sandwich Compositing Overlay
+- [ ] Verify image generation compiles cleanly and triggers `renderAdComposite`.
+- [ ] Confirm Playwright browser spawns, loads custom fonts, and saves the final PNG.
+- [ ] Verify 3D sandwich structure: watermark outlines rendered behind ONNX transparency foreground product cutout, with legible text in front of it.
+- [ ] Verify OCR scan gibberish filter correctly triggers background re-rolls if lettering is noisy/unreadable.
+
+### 11. Color Sampling Relative Luminance Legibility Solver
+- [ ] Sample local contrast colors under different background lighting:
+  - If dark, verify text renders white/light (`#FFFFFF`).
+  - If bright, verify text renders dark/brand color.
+  - If high-complexity clutter, verify a frosted-glass card backplate with relative alpha opacity is automatically rendered.
+- [ ] Verify luxury typography cursive script highlights load properly (`Caveat`/`Pacifico`) and render with the slanted styling.
+- [ ] Verify features list checklist matches chosen `badgeStyle` (`solid` circles or `double_ring` outlines).
+- [ ] Verify pill-shaped CTA buttons display white leading arrow containers.
+
+### 12. LinkedIn Direct Publishing & OAuth Flow
+- [ ] Launch `src/test_linkedin_real.ts` local listener.
+- [ ] Link a test profile, verify redirect callback exchanges token, encrypts it (AES-256-GCM), and upserts connection record.
+- [ ] Verify `demo.html` connected social accounts panel refreshes and displays linked profile.
+- [ ] Trigger a scheduled post, watch the publish worker capture the delayed job, stream binary chunks to LinkedIn assets, and publish UGC share successfully.
+
+---
+
 ## ✅ Acceptance Criteria
 
 **Minimum Requirements**:
