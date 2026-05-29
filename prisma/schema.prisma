@@ -50,6 +50,10 @@ model SocialCampaign {
   igUserId    String? // IG Business/Creator account ID
   accessToken String? @db.Text // long-lived user access token (store encrypted at rest)
 
+  // OAuth-connected social account (optional — overrides igUserId/accessToken when set)
+  socialAccountId String?
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id])
+
   // AI options
   festivalEnabled Boolean      @default(true)
   goal            CampaignGoal @default(AWARENESS)
@@ -67,6 +71,7 @@ model SocialCampaign {
   @@index([funnelId])
   @@index([userId])
   @@index([status])
+  @@index([socialAccountId])
   @@map("social_campaigns")
   @@schema("social")
 }
@@ -77,6 +82,52 @@ enum CampaignGoal {
   CONVERSION
   RETENTION
 
+  @@schema("social")
+}
+
+// ── OAuth-Connected Social Accounts ──────────────────────────────────────────
+// One row per platform account per user. Created/updated via OAuth callback.
+// Tokens are stored AES-256-GCM encrypted; decryption happens at publish time.
+
+enum SocialAccountPlatform {
+  LINKEDIN
+  INSTAGRAM
+
+  @@schema("social")
+}
+
+model SocialAccount {
+  id        String                @id @default(uuid())
+  userId    String                // FK → users.id in server.aladdyn (cross-service)
+  platform  SocialAccountPlatform
+
+  // Platform-specific identifiers
+  platformAccountId String  // IG Business Account ID  OR  LinkedIn member sub (from /v2/userinfo)
+  authorUrn         String? // LinkedIn posting URN: "urn:li:person:xxx" or "urn:li:organization:xxx"
+  accountName       String  // Display name shown in UI
+  accountHandle     String? // @username or LinkedIn vanity URL
+  profilePictureUrl String?
+
+  // Encrypted OAuth credentials
+  // Values are AES-256-GCM encrypted via oauthService.encryptToken()
+  accessToken      String  @db.Text
+  refreshToken     String? @db.Text // LinkedIn only (60-day refresh)
+  tokenExpiresAt   DateTime? // null = indefinitely long-lived (Meta Page tokens)
+
+  // Extra platform metadata (e.g. { pageId, pageName } for IG-linked FB pages)
+  metadata Json?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Campaigns linked to this connected account
+  campaigns SocialCampaign[]
+
+  @@unique([userId, platform, platformAccountId])
+  @@index([userId, platform])
+  @@index([isActive])
+  @@map("social_accounts")
   @@schema("social")
 }
 

@@ -123,6 +123,45 @@
           </div>
         </section>
 
+        <!-- CONNECTED SOCIAL ACCOUNTS PANEL -->
+        <section class="glass-panel rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col gap-4">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <span class="text-blue-400">00b.</span> Connected Social Accounts
+            </h2>
+            <button onclick="loadConnectedAccounts()" class="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 border border-slate-700">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.253 8H18"></path></svg>
+              Refresh
+            </button>
+          </div>
+
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Connect your LinkedIn (and later Instagram) accounts to enable OAuth-based auto-posting. Tokens are stored encrypted — no manual credential pasting required.
+          </p>
+
+          <!-- Connect Buttons -->
+          <div class="flex flex-wrap gap-3">
+            <button id="btn-connect-linkedin" onclick="connectLinkedIn()"
+              class="flex items-center gap-2.5 py-2.5 px-5 bg-[#0A66C2] hover:bg-[#0958a8] text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-blue-900/30 active:scale-[0.98]">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+              Connect LinkedIn
+            </button>
+            <button id="btn-connect-meta" onclick="connectMeta()"
+              class="flex items-center gap-2.5 py-2.5 px-5 bg-[#1877F2] hover:bg-[#1464d0] text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-blue-900/30 active:scale-[0.98]">
+              <!-- Meta "f" logo -->
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+              Log in with Meta
+            </button>
+          </div>
+
+          <!-- Connected Accounts List -->
+          <div id="connected-accounts-list" class="flex flex-col gap-2.5">
+            <div class="text-xs text-slate-500 font-semibold italic text-center py-4 bg-slate-900/30 border border-slate-800 rounded-2xl">
+              Loading connected accounts...
+            </div>
+          </div>
+        </section>
+
         <!-- CAMPAIGN FORM PANEL -->
         <section class="glass-panel rounded-3xl p-6 shadow-xl border border-slate-800 flex flex-col gap-5">
           <div class="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -349,6 +388,36 @@
     window.addEventListener('DOMContentLoaded', () => {
       checkConnections();
       loadExistingCampaigns();
+      loadConnectedAccounts();
+
+      // Handle OAuth callback query params (LinkedIn + Meta)
+      const params = new URLSearchParams(window.location.search);
+      const connected = params.get('connected');
+      const error = params.get('error');
+
+      if (connected === 'linkedin') {
+        const name = params.get('account') ? decodeURIComponent(params.get('account')) : 'your account';
+        showToast(`✅ LinkedIn connected: ${name}`, 'success');
+      } else if (connected === 'instagram') {
+        const accounts = params.get('accounts') ? decodeURIComponent(params.get('accounts')) : 'your account';
+        showToast(`✅ Instagram connected: ${accounts}`, 'success');
+      } else if (error) {
+        const messages = {
+          linkedin_denied: 'LinkedIn connection was cancelled.',
+          linkedin_invalid_state: 'LinkedIn OAuth state mismatch — please try again.',
+          linkedin_exchange_failed: 'LinkedIn token exchange failed — check server logs.',
+          meta_denied: 'Meta connection was cancelled.',
+          meta_invalid_state: 'Meta OAuth state mismatch — please try again.',
+          meta_no_instagram_accounts: 'No Instagram Business account found linked to your Facebook Page. Make sure your Instagram account is a Business or Creator account connected to a Facebook Page.',
+          meta_exchange_failed: 'Meta token exchange failed — check server logs.',
+        };
+        showToast(`⚠️ ${messages[error] || `OAuth error: ${error}`}`, 'error');
+      }
+
+      // Clean up query params from URL without reloading
+      if (connected || error) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
       
       // Default manual dates to today and 14 days later
       const today = new Date().toISOString().split('T')[0];
@@ -358,6 +427,123 @@
       if (startEl) startEl.value = today;
       if (endEl) endEl.value = end;
     });
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      const bg = type === 'success' ? 'bg-emerald-900/90 border-emerald-700 text-emerald-200' : 'bg-rose-900/90 border-rose-700 text-rose-200';
+      toast.className = `fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl border backdrop-blur-md shadow-2xl text-sm font-semibold transition-all ${bg}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(8px)'; toast.style.transition = 'all 0.4s ease'; }, 3500);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    async function loadConnectedAccounts() {
+      const container = document.getElementById('connected-accounts-list');
+      try {
+        const res = await fetch(`${API_BASE}/social-accounts`);
+        if (!res.ok) throw new Error('Failed to load accounts');
+        const data = await res.json();
+        const accounts = data.data.accounts || [];
+
+        if (accounts.length === 0) {
+          container.innerHTML = `
+            <div class="text-xs text-slate-500 font-semibold italic text-center py-4 bg-slate-900/30 border border-slate-800 rounded-2xl">
+              No connected social accounts yet.
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = accounts.map(account => {
+          const isLI = account.platform === 'LINKEDIN';
+          const badgeColor = isLI ? 'bg-[#0A66C2]/15 text-[#0A66C2] border-[#0A66C2]/20' : 'bg-pink-500/15 text-pink-400 border-pink-500/20';
+          const platformLogo = isLI 
+            ? `<svg class="w-4 h-4 text-[#0A66C2]" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>`
+            : `<svg class="w-4 h-4 text-pink-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>`;
+          const profilePic = account.profilePictureUrl 
+            ? `<img src="${account.profilePictureUrl}" class="w-8 h-8 rounded-full border border-slate-700 object-cover" />`
+            : `<div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">${account.accountName[0].toUpperCase()}</div>`;
+          
+          return `
+            <div class="flex items-center justify-between gap-3 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-3 hover:border-slate-700 transition-all">
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                ${profilePic}
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-bold text-white truncate leading-tight">${account.accountName}</div>
+                  <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-500 font-semibold font-mono">
+                    <span>ID: ${account.platformAccountId.slice(0, 10)}...</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${badgeColor} flex items-center gap-1">
+                  ${platformLogo}
+                  ${account.platform}
+                </span>
+                <button onclick="disconnectAccount('${account.id}')" class="p-2 bg-slate-800/80 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-900/50 rounded-xl transition-all text-slate-400 hover:text-rose-400" title="Disconnect Account">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `
+          <div class="text-xs text-rose-400 font-semibold italic text-center py-4 bg-rose-900/10 border border-rose-950 rounded-2xl">
+            Failed to load connected accounts: ${err.message}
+          </div>
+        `;
+      }
+    }
+
+    async function connectLinkedIn() {
+      try {
+        const res = await fetch(`${API_BASE}/auth/linkedin/connect`);
+        if (!res.ok) throw new Error('Failed to fetch connection URL');
+        const data = await res.json();
+        if (data.success && data.data?.authUrl) {
+          window.location.href = data.data.authUrl;
+        } else {
+          throw new Error(data.message || 'No redirect URL returned');
+        }
+      } catch (err) {
+        alert(`Connection failed: ${err.message}`);
+      }
+    }
+
+    async function connectMeta() {
+      const btn = document.getElementById('btn-connect-meta');
+      if (btn) { btn.disabled = true; btn.textContent = 'Redirecting…'; }
+      try {
+        const res = await fetch(`${API_BASE}/auth/meta/connect`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.message || `Server returned ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.success && data.data?.authUrl) {
+          window.location.href = data.data.authUrl;
+        } else {
+          throw new Error(data.message || 'No redirect URL returned');
+        }
+      } catch (err) {
+        if (btn) { btn.disabled = false; btn.innerHTML = `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg> Log in with Meta`; }
+        alert(`Meta connection failed: ${err.message}`);
+      }
+    }
+
+    async function disconnectAccount(accountId) {
+      if (!confirm('Are you sure you want to disconnect this account?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/social-accounts/${accountId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to disconnect account');
+        alert('Account disconnected successfully.');
+        loadConnectedAccounts();
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+      }
+    }
 
     async function checkConnections() {
       // 1. Check API Health
@@ -1101,6 +1287,7 @@
         else if (post.status === 'FAILED') statusColor = 'bg-rose-500/10 border-rose-500/20 text-rose-400';
 
         let actionButtonHtml = '';
+        const _pid = post.id || post.postId || post.entryId;
         if (post.status === 'POSTED') {
           const isLI = post.platform === 'linkedin';
           const link = isLI && post.platformPostId 
@@ -1111,10 +1298,26 @@
             : `<span class="text-xs font-bold text-emerald-400">✓ Published</span>`;
         } else if (post.status === 'PUBLISHING') {
           actionButtonHtml = `<span class="text-xs font-bold text-purple-400 animate-pulse">⚡ Publishing...</span>`;
+        } else if (post.status === 'FAILED') {
+          const errSnippet = (post.publishError || 'Publish failed').slice(0, 45);
+          const errFull = (post.publishError || 'Publish failed').replace(/"/g, '&quot;');
+          actionButtonHtml = `
+            <div class="flex flex-col gap-1 items-end">
+              <span class="text-[9px] font-bold text-rose-400 text-right leading-tight max-w-[200px]" title="${errFull}">⚠ ${errSnippet}${errSnippet.length < (post.publishError||'').length ? '…' : ''}</span>
+              <button onclick="forcePublishNow('${_pid}', this)" class="py-1.5 px-3 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/30 hover:border-rose-500 text-rose-300 hover:text-white font-bold text-xs rounded-xl transition-all active:scale-95">🔄 Force Publish Now</button>
+            </div>`;
         } else if (post.status === 'APPROVED' || post.status === 'SCHEDULED') {
-          actionButtonHtml = `<span class="text-xs font-bold text-blue-400">✓ Approved & Scheduled</span>`;
+          actionButtonHtml = `
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-blue-400">✓ Scheduled</span>
+              <button onclick="forcePublishNow('${_pid}', this)" class="py-1.5 px-3 bg-slate-700/60 hover:bg-blue-600/30 border border-slate-600 hover:border-blue-500/50 text-slate-400 hover:text-blue-300 font-bold text-xs rounded-xl transition-all active:scale-95" title="Bypass schedule — publish immediately">⚡ Now</button>
+            </div>`;
         } else {
-          actionButtonHtml = `<button onclick="approvePostLive('${post.id || post.postId || post.entryId}', this)" class="py-2 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95">✅ Approve Post</button>`;
+          actionButtonHtml = `
+            <div class="flex items-center gap-2">
+              <button onclick="approvePostLive('${_pid}', this)" class="py-2 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95">✅ Approve</button>
+              <button onclick="forcePublishNow('${_pid}', this)" class="py-2 px-3 bg-slate-700/60 hover:bg-purple-600/30 border border-slate-600 hover:border-purple-500/50 text-slate-400 hover:text-purple-300 font-bold text-xs rounded-xl transition-all active:scale-95" title="Approve and publish immediately">⚡ Now</button>
+            </div>`;
         }
 
         footerBlock.innerHTML = `
@@ -1263,6 +1466,44 @@
       } catch (err) {
         alert(`Approval failed: ${err.message}`);
         buttonEl.innerText = originalText;
+        buttonEl.disabled = false;
+      }
+    }
+
+    async function retryPost(postId, buttonEl) {
+      buttonEl.disabled = true;
+      const originalHtml = buttonEl.innerHTML;
+      buttonEl.innerHTML = '⏳ Retrying...';
+
+      try {
+        const res = await fetch(`${API_BASE}/posts/${postId}/retry`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error?.message || data.message || 'Retry failed');
+
+        showToast('🔄 Post queued for retry — will publish at next scheduler tick', 'success');
+        await loadCompletedCampaignOutput();
+      } catch (err) {
+        showToast(`⚠️ Retry failed: ${err.message}`, 'error');
+        buttonEl.innerHTML = originalHtml;
+        buttonEl.disabled = false;
+      }
+    }
+
+    async function forcePublishNow(postId, buttonEl) {
+      buttonEl.disabled = true;
+      const originalHtml = buttonEl.innerHTML;
+      buttonEl.innerHTML = '⏳ Publishing...';
+
+      try {
+        const res = await fetch(`${API_BASE}/posts/${postId}/publish`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error?.message || data.message || 'Publish failed');
+
+        showToast('⚡ Post enqueued for immediate publishing', 'success');
+        await loadCompletedCampaignOutput();
+      } catch (err) {
+        showToast(`⚠️ Publish failed: ${err.message}`, 'error');
+        buttonEl.innerHTML = originalHtml;
         buttonEl.disabled = false;
       }
     }

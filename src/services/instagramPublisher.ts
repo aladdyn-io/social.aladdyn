@@ -15,7 +15,7 @@
 
 import axios, { AxiosError } from 'axios';
 
-const GRAPH_API = 'https://graph.facebook.com/v25.0';
+const GRAPH_API = 'https://graph.instagram.com/v25.0';
 
 // Max attempts to poll container status before giving up (1 poll/min = 5 min total)
 const POLL_MAX_ATTEMPTS = 5;
@@ -59,6 +59,8 @@ function igError(err: unknown, context: string): never {
   if (err instanceof AxiosError) {
     const data = err.response?.data as Record<string, unknown> | undefined;
     const meta = data?.error as Record<string, unknown> | undefined;
+    // Print full API error for debugging
+    console.error(`[Instagram] ${context} — HTTP ${err.response?.status}:`, JSON.stringify(data, null, 2));
     throw new Error(
       `[Instagram] ${context}: ${meta?.message ?? err.message} ` +
         `(code=${meta?.code ?? '?'} subcode=${meta?.error_subcode ?? '?'})`
@@ -156,10 +158,12 @@ type ContainerStatus = 'IN_PROGRESS' | 'FINISHED' | 'PUBLISHED' | 'ERROR' | 'EXP
 
 async function pollContainerStatus(
   containerId: string,
-  accessToken: string
+  accessToken: string,
+  maxAttempts = POLL_MAX_ATTEMPTS,
+  intervalMs = POLL_INTERVAL_MS
 ): Promise<void> {
-  for (let attempt = 1; attempt <= POLL_MAX_ATTEMPTS; attempt++) {
-    await sleep(POLL_INTERVAL_MS);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await sleep(intervalMs);
 
     let statusCode: ContainerStatus;
     try {
@@ -172,7 +176,7 @@ async function pollContainerStatus(
       igError(err, `pollContainerStatus attempt ${attempt}`);
     }
 
-    console.log(`[Instagram] Container ${containerId} status: ${statusCode} (attempt ${attempt}/${POLL_MAX_ATTEMPTS})`);
+    console.log(`[Instagram] Container ${containerId} status: ${statusCode} (attempt ${attempt}/${maxAttempts})`);
 
     if (statusCode === 'FINISHED') return;
     if (statusCode === 'ERROR') {
@@ -185,7 +189,7 @@ async function pollContainerStatus(
   }
 
   throw new Error(
-    `[Instagram] Container ${containerId} did not finish processing after ${POLL_MAX_ATTEMPTS} attempts`
+    `[Instagram] Container ${containerId} did not finish processing after ${maxAttempts} attempts`
   );
 }
 
@@ -296,9 +300,14 @@ export async function publishToInstagram(
 
   console.log(`[Instagram] Container created: ${containerId} (type=${contentType})`);
 
-  // Videos need processing time before publishing
+  // All containers need to reach FINISHED before publishing.
+  // Videos take longer (poll every 60s); photos/carousels are usually ready in a few seconds.
   if (needsStatusPoll) {
-    await pollContainerStatus(containerId, accessToken);
+    // Video: poll every 60s, up to 5 attempts (5 min)
+    await pollContainerStatus(containerId, accessToken, POLL_MAX_ATTEMPTS, POLL_INTERVAL_MS);
+  } else {
+    // Photo/carousel: poll every 3s, up to 10 attempts (30s max)
+    await pollContainerStatus(containerId, accessToken, 10, 3_000);
   }
 
   const mediaId = await publishContainer(igUserId, accessToken, containerId);

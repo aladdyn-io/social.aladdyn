@@ -54,6 +54,7 @@ import { generateAiPostForDate, createManualPostForDate } from './services/calen
 import { uploadBufferToStorage } from './services/objectStorage';
 import { ManualPostData } from './types/calendar';
 import { CampaignPipelineOrchestrator } from './pipeline/orchestrator';
+import oauthRouter from './routes/oauth';
 
 // ============================================================================
 // SERVER SETUP
@@ -109,6 +110,16 @@ app.use((req, res, next) => {
 // ============================================================================
 // ROUTES
 // ============================================================================
+
+// ── OAuth Social Account Connection flows ─────────────────────────────────────
+// GET  /api/v1/auth/linkedin/connect    — returns LinkedIn OAuth URL
+// GET  /api/v1/auth/linkedin/callback   — exchanges code, saves SocialAccount
+// GET  /api/v1/auth/meta/connect        — returns Meta OAuth URL (Phase 3)
+// GET  /api/v1/auth/meta/callback       — exchanges code, saves IG accounts
+// GET  /api/v1/social-accounts          — list connected accounts
+// DELETE /api/v1/social-accounts/:id    — disconnect an account
+app.use('/api/v1/auth', oauthRouter);
+app.use('/api/v1', oauthRouter);
 
 /**
  * Health check endpoint
@@ -1981,7 +1992,16 @@ function startServer() {
     console.log(`  POST   http://localhost:${PORT}/api/v1/posts/:id/regenerate`);
     console.log(`  DELETE http://localhost:${PORT}/api/v1/posts/:id`);
     console.log(`  POST   http://localhost:${PORT}/api/v1/test`);
+    console.log('');
+    console.log('OAuth / Social Account endpoints:');
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/linkedin/connect`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/linkedin/callback`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/meta/connect  (Phase 3)`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/meta/callback  (Phase 3)`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/social-accounts`);
+    console.log(`  DELETE http://localhost:${PORT}/api/v1/social-accounts/:id`);
     console.log('='.repeat(80));
+
 
     // ── BullMQ workers + scheduler ─────────────────────────────────────────
     // Only start if Redis is reachable; failure is non-fatal in dev

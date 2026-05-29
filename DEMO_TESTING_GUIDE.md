@@ -18,6 +18,105 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
    ```
    Or open the file directly in a browser (ensure API is accessible)
 
+---
+
+## 🌐 Secure Tunnels & Meta Developer Portal Setup
+
+To test **Instagram Login (OAuth)** and **Publishing** locally, you must set up secure tunnels. Meta's servers require secure HTTPS URLs for OAuth redirect callbacks and publicly accessible endpoints to fetch images for posting.
+
+### 1. The Architecture
+*   **App Server (`localhost:3000`)** ── Proxy via **Cloudflare Tunnel** ── Used for Instagram/LinkedIn OAuth redirects.
+*   **MinIO Storage (`localhost:9000`)** ── Proxy via **ngrok** ── Used by Meta's servers to download your generated media assets.
+
+---
+
+### 2. Set Up Cloudflare Tunnel (for Localhost Server)
+
+Cloudflare Tunnels are free, highly stable, and do not expire. They are perfect for OAuth redirect callbacks.
+
+1. **Install Cloudflare CLI (cloudflared):**
+   *   **Windows (PowerShell):**
+       ```powershell
+       winget install Cloudflare.cloudflared
+       ```
+2. **Start a Tunnel pointing to your app:**
+   ```bash
+   cloudflared tunnel --url http://localhost:3000
+   ```
+3. **Capture the Tunnel URL:**
+   Locate the generated URL in the terminal (e.g., `https://zinc-demographic-serum-interpreted.trycloudflare.com`).
+
+---
+
+### 3. Set Up ngrok (for MinIO Media Hosting)
+
+Meta's servers need to access your locally generated images via a public endpoint.
+
+1. **Install ngrok:**
+   *   **Windows (PowerShell):**
+       ```powershell
+       winget install equinusocio.ngrok
+       ```
+2. **Start the Tunnel pointing to MinIO S3 port (`9000`):**
+   ```bash
+   ngrok http 9000
+   ```
+3. **Capture the ngrok URL:**
+   Locate your public ngrok URL (e.g., `https://state-contusion-uptake.ngrok-free.dev`).
+
+---
+
+### 4. Update Your `.env` Variables
+
+Open your `.env` file and update the following settings:
+
+```env
+# ── META OAUTH REDIRECTS ──
+# Use your Cloudflare Tunnel URL for the redirect callback
+META_REDIRECT_URI="https://<YOUR_CLOUDFLARE_SUBDOMAIN>.trycloudflare.com/api/v1/auth/meta/callback"
+
+# ── MINIO PUBLIC ASSETS ──
+# Use your public ngrok URL so Meta's servers can download images
+MINIO_PUBLIC_ENDPOINT="https://<YOUR_NGROK_ID>.ngrok-free.dev"
+```
+
+---
+
+### 5. Configure the Meta Developer Portal
+
+To allow Meta to trust your local environment tunnels:
+
+1. **Go to [Meta Developer Portal](https://developers.facebook.com/)** and select your Business/Instagram login app.
+2. **Under App Settings > Basic:**
+   *   Update **App Domains** with your Cloudflare tunnel domain (e.g., `trycloudflare.com`).
+   *   Ensure the Website **Site URL** is set to your active Cloudflare tunnel URL (`https://xxx.trycloudflare.com`).
+3. **Under Use Cases > Instagram Business Login > Settings:**
+   *   Add your exact `.env` redirect callback URL under **Valid OAuth Redirect URIs**:
+       ```
+       https://<YOUR_CLOUDFLARE_SUBDOMAIN>.trycloudflare.com/api/v1/auth/meta/callback
+       ```
+4. **Under App Settings > Advanced:**
+   *   Ensure **Share Redirect URI list** or **Strict Mode** matches your exact tunnel redirect URL.
+
+---
+
+### 6. Run and Test the Flow
+
+1. Restart the node server:
+   ```bash
+   npm run dev
+   ```
+2. Open your Cloudflare Tunnel URL in your browser:
+   ```
+   https://<YOUR_CLOUDFLARE_SUBDOMAIN>.trycloudflare.com/demo.html
+   ```
+3. Generate a campaign.
+4. Click **"Connect Instagram"** (uses the Cloudflare redirect loop seamlessly).
+5. Open your generated post and hit **Publish**! Meta will reach into your MinIO instance via the ngrok tunnel, pull the image, and publish it live!
+
+---
+
+
 ## Features
 
 ### 🚀 Tab 1: Generate Content

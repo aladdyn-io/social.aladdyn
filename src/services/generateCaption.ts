@@ -64,13 +64,15 @@ CTA: ${strategy.cta_style}
 
 Rules:
 - Keep it engaging, natural, and highly compelling.
+- Format with clean paragraph spacing and clear line breaks between thoughts for excellent readability. Do NOT output a single wall of text.
 - Feel free to use emojis and formatting creatively where appropriate.
-- Include a call-to-action
-- Reference services naturally if relevant
-- Write for ${normalized.geography} audience
+- Include a call-to-action.
+- Reference services naturally if relevant.
+- Write for ${normalized.geography} audience.
+- Do NOT wrap the caption in any outer double quotes or single quotes.
 ${educationalFormatRule}
 
-Return ONLY the caption text.`;
+Return ONLY the raw caption text without any introductory text, markdown code blocks, or wrapping quotes.`;
 
   const completion = await callLlm({
     model: process.env.CAPTION_MODEL || process.env.LLM_MODEL || 'llama-3.3-70b-versatile',
@@ -93,5 +95,27 @@ Return ONLY the caption text.`;
 function validateCaption(caption: string): string {
   if (!caption || caption.length < 20) throw new Error('Caption too short');
 
-  return caption.trim();
+  let cleaned = caption.trim();
+
+  // Strip wrapping quotes (single, double, backticks)
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  if (cleaned.startsWith('`') && cleaned.endsWith('`')) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  // Strip any markdown code blocks
+  if (cleaned.startsWith('```') && cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(3, -3).trim();
+  }
+
+  // Handle case where some LLMs might return "Caption: ..." prefix
+  if (/^caption:\s*/i.test(cleaned)) {
+    cleaned = cleaned.replace(/^caption:\s*/i, '').trim();
+  }
+
+  return cleaned;
 }
