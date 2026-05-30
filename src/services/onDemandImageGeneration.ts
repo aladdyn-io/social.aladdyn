@@ -196,6 +196,38 @@ export async function generatePostImage(
 
     logger.info(`Campaign branding context loaded. Logo: ${brandLogoUrl || 'None'}, Brand Name: ${brandName}`);
 
+    // PRE-PASS: Run Copy Director early so we can derive the HTML layout zone
+    // before generating the background image. This ensures the image leaves
+    // exactly the right region clear for the overlay.
+    logger.info('Running early Copy Director pass to inform image spatial requirements...');
+    let earlyNegativeSpaceZone: import('./generateImagePrompt').NegativeSpaceZone = 'left_column';
+    let earlyCopyBlueprint: import('../types/content').CopyBlueprint | undefined;
+    try {
+      earlyCopyBlueprint = await generateAdCopyBlueprint({
+        topic: post.topic || undefined,
+        caption: post.caption || undefined,
+        contentPillar: post.contentPillar || (post.metadata as any)?.contentPillar || undefined,
+        brandName: brandName,
+        industry: campaign?.industry || 'Lifestyle',
+        tone: campaign?.tone || campaign?.strategy?.tone || undefined
+      });
+
+      // Derive spatial zone from industry + copy intent
+      const indLower = (campaign?.industry || '').toLowerCase();
+      const isServiceOrB2B = indLower.includes('software') || indLower.includes('saas') || indLower.includes('service') || indLower.includes('learning') || indLower.includes('education') || indLower.includes('tech');
+      const intent = earlyCopyBlueprint.intent || '';
+      
+      // Educational/step-by-step posts → left column (numbered list needs left panel)
+      // Product highlight → left column (product on right)
+      // Testimonial/quote → left column (quote panel on left)
+      // Stats/comparison → left column (data panel on left)
+      earlyNegativeSpaceZone = 'left_column'; // default for all current archetypes
+      
+      logger.info(`✓ Early copy pass complete. Intent: ${intent}, Zone: ${earlyNegativeSpaceZone}`);
+    } catch (e: any) {
+      logger.warn(`Early copy pass failed, using default zone: ${e.message}`);
+    }
+
     // EXPLICIT SAY-SO INSTRUCTION FOR DYNAMIC IMAGE PROMPT RE-GENERATION:
     // We re-generate the visual image prompt on-the-fly using the brand colors, strategy,
     // and layout contrast constraints, so that the HTML Renderer/Layout preferences
@@ -233,7 +265,9 @@ export async function generatePostImage(
         strategyContext as any,
         normalizedInput as any,
         feedback,
-        preferredLayout
+        preferredLayout,
+        // Use the zone derived from the early copy pass
+        earlyNegativeSpaceZone
       );
 
       logger.info(`✓ Successfully updated image prompt with HTML Renderer constraints: "${updatedPrompt.slice(0, 120)}..."`);
@@ -350,9 +384,9 @@ export async function generatePostImage(
       logger.info(`Running color sampling for safe zone: ${safestQuadrant}`);
       const colorMetrics = await analyzeLocalColors(baseImageResult.imageBuffer, safestQuadrant, 8);
 
-      // STEP 5.4: Copy Director Pass (LLM copywriter)
-      logger.info('Invoking Copy Director to extract structural text nodes...');
-      const copyBlueprint = await generateAdCopyBlueprint({
+      // STEP 5.4: Copy Director Pass — reuse early blueprint if available, otherwise re-run
+      logger.info('Using Copy Director blueprint for layout pass...');
+      const copyBlueprint = earlyCopyBlueprint || await generateAdCopyBlueprint({
         topic: post.topic || undefined,
         caption: post.caption || undefined,
         contentPillar: post.contentPillar || (post.metadata as any)?.contentPillar || undefined,
@@ -362,6 +396,18 @@ export async function generatePostImage(
       });
 
       // STEP 5.5: Double-pass Layout Director pass (LLM layout solver)
+      // IMPORTANT: The dynamicHtmlBlock always renders a white-to-transparent gradient panel
+      // on the left side. The actual surface color the text sits on is near-white, NOT the
+      // raw background image pixels. Override contrastMetrics to reflect the HTML overlay
+      // surface so the LLM always picks dark text (never white-on-white).
+      const overlayIsDarkBg = false; // white gradient panel = light surface = dark text required
+      const overlayHeadlineColor = campaign?.brandColor && campaign.brandColor !== '#FFFFFF' && campaign.brandColor !== '#ffffff'
+        ? campaign.brandColor  // use brand color if it's dark enough
+        : '#0F172A';           // fallback to near-black
+      const overlaySubtitleColor = '#334155';
+      const overlayAvgHex = '#F8F8F6'; // near-white (the gradient panel surface)
+      const overlayAvgName = 'White Gradient Panel (HTML overlay)';
+
       let layoutBlueprint = undefined;
       try {
         layoutBlueprint = await generateLayoutBlueprint({
@@ -374,11 +420,14 @@ export async function generatePostImage(
           safestQuadrant,
           quadrantScores: (baseSaliency as any).finalQuadrantScores || baseSaliency.quadrantScores,
           contrastMetrics: {
-            isDarkBg: colorMetrics.isDarkBg,
-            headlineColor: colorMetrics.headlineColor,
-            subtitleColor: colorMetrics.subtitleColor,
-            averageColorHex: colorMetrics.averageColorHex,
-            averageColorName: colorMetrics.averageColorName
+            // Use overlay surface metrics, not raw background pixel metrics
+            isDarkBg: overlayIsDarkBg,
+            headlineColor: overlayHeadlineColor,
+            subtitleColor: overlaySubtitleColor,
+            averageColorHex: overlayAvgHex,
+            averageColorName: overlayAvgName,
+            // Still pass detailed region data from the actual image for reference
+            detailedRegions: (colorMetrics as any).detailedRegions
           },
           canvasDimensions: { 
             width: baseImageResult.metadata?.dimensions?.width || 1080, 
@@ -598,7 +647,8 @@ export async function generatePostImage(
             copyElements: slideCopyBlueprint?.elements || [],
             layoutBlueprint: {
               ...slideBlueprint,
-              dynamicHtmlBlock: undefined // Force native compositor fallback
+              // Pass dynamicHtmlBlock through; htmlRenderer validates and falls back if malformed
+              layoutType: slideBlueprint.layoutType
             }
           });
 
@@ -651,7 +701,7 @@ export async function generatePostImage(
           copyElements: copyBlueprint?.elements || [],
           layoutBlueprint: layoutBlueprint ? {
             ...layoutBlueprint,
-            dynamicHtmlBlock: undefined, // Force native compositor fallback for pixel-perfect overlays
+            // Pass dynamicHtmlBlock through; htmlRenderer validates and falls back if malformed
             layoutType: layoutTypeOverride || layoutBlueprint.layoutType
           } : {
             layoutType: layoutTypeOverride || 'classic'

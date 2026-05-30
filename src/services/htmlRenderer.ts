@@ -392,7 +392,7 @@ export async function renderAdComposite({
   subjectMaskUrl,
   headline,
   subtitle,
-  cta,
+  cta: rawCta,
   quadrant,
   colors,
   width = 1080,
@@ -420,6 +420,15 @@ export async function renderAdComposite({
     // 1. Resolve Layout Director parameters
     const bp = layoutBlueprint || {};
     const slideIdx = slideIndex !== undefined ? slideIndex : 0;
+
+    // Enforce CTA max length — truncate to 5 words + arrow if the LLM wrote a full sentence
+    const truncateCta = (text: string): string => {
+      const stripped = text.replace(/\s*[→➜»>]+\s*$/, '').trim();
+      const words = stripped.split(/\s+/);
+      if (words.length <= 5) return text; // already short enough
+      return words.slice(0, 5).join(' ') + ' →';
+    };
+    const cta = truncateCta(rawCta);
     
     // Check template style & layout type
     const templateStyle = passedTemplateStyle || bp.designArchetype || 'glassmorphism';
@@ -447,7 +456,6 @@ export async function renderAdComposite({
       : (bp.subtitleColorOverride || bp.textColorOverride || colors.subtitleColor);
     const accentColor = finalTextColor || brandAccentColor || colors.headlineColor;
     const fontMultiplier = bp.fontSizeScale || 1.0;
-    const contrastShieldClass = ''; // Disabled to keep typography clean and crisp
 
     const featureList = resolveFeatureList(subtitle, headline, bp.features);
     
@@ -546,14 +554,35 @@ export async function renderAdComposite({
 
       // Fallback: Replace data-doodle placeholders with inline SVGs in case the LLM outputs placeholders instead of raw SVGs
       const { DOODLES } = require('./svgDoodles');
+      // Match both <div data-doodle> and <span data-doodle> with any attribute order
       bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
-        /<div\s+data-doodle=['"]([^'"]+)['"]\s+data-doodle-color=['"]([^'"]+)['"]([^>]*)><\/div>/gi,
-        (match, doodleName, color, rest) => {
-          const doodleFn = DOODLES[doodleName as keyof typeof DOODLES];
-          if (doodleFn) {
-            return `<div${rest}>${doodleFn(color)}</div>`;
-          }
-          return match;
+        /<(div|span)\s+[^>]*data-doodle=['"]([^'"]+)['"][^>]*data-doodle-color=['"]([^'"]+)['"][^>]*><\/(div|span)>/gi,
+        (match, tag, doodleName, color) => {
+          const doodleFn = (DOODLES as any)[doodleName];
+          return doodleFn ? `<span style="display:inline-block;">${doodleFn(color)}</span>` : '';
+        }
+      );
+      // Also handle reversed attribute order: data-doodle-color before data-doodle
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /<(div|span)\s+[^>]*data-doodle-color=['"]([^'"]+)['"][^>]*data-doodle=['"]([^'"]+)['"][^>]*><\/(div|span)>/gi,
+        (match, tag, color, doodleName) => {
+          const doodleFn = (DOODLES as any)[doodleName];
+          return doodleFn ? `<span style="display:inline-block;">${doodleFn(color)}</span>` : '';
+        }
+      );
+      // Also handle self-closing variants: <span data-doodle="..." data-doodle-color="..." />
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /<(div|span)\s+[^>]*data-doodle=['"]([^'"]+)['"][^>]*data-doodle-color=['"]([^'"]+)['"][^>]*\/>/gi,
+        (match, tag, doodleName, color) => {
+          const doodleFn = (DOODLES as any)[doodleName];
+          return doodleFn ? `<span style="display:inline-block;">${doodleFn(color)}</span>` : '';
+        }
+      );
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /<(div|span)\s+[^>]*data-doodle-color=['"]([^'"]+)['"][^>]*data-doodle=['"]([^'"]+)['"][^>]*\/>/gi,
+        (match, tag, color, doodleName) => {
+          const doodleFn = (DOODLES as any)[doodleName];
+          return doodleFn ? `<span style="display:inline-block;">${doodleFn(color)}</span>` : '';
         }
       );
 
@@ -600,6 +629,22 @@ export async function renderAdComposite({
     const fontsToLoad = new Set<string>();
     if (headlineFont) fontsToLoad.add(headlineFont);
     if (subtitleFont) fontsToLoad.add(subtitleFont);
+
+    // Extract any Google Fonts referenced in dynamicHtmlBlock inline styles
+    // so they are loaded before Playwright renders the page
+    if (bp.dynamicHtmlBlock) {
+      const fontMatches = bp.dynamicHtmlBlock.matchAll(/font-family:\s*([^;}"']+)/gi);
+      for (const match of fontMatches) {
+        const families = match[1].split(',').map((f: string) => f.trim().replace(/['"]/g, ''));
+        for (const family of families) {
+          const normalized = family.trim();
+          if (normalized && !['serif', 'sans-serif', 'cursive', 'monospace', 'inherit', 'initial', 'unset'].includes(normalized.toLowerCase())) {
+            fontsToLoad.add(normalized);
+          }
+        }
+      }
+    }
+
     // Append premium cursive fonts Caveat and Pacifico
     fontsToLoad.add('Caveat');
     fontsToLoad.add('Pacifico');
@@ -650,6 +695,29 @@ export async function renderAdComposite({
 
     // Convert raw background buffer to inline Base64 data URI
     const baseImageBase64 = baseImageBuffer.toString('base64');
+
+    // Validate dynamicHtmlBlock: must contain at least one root <div to be usable.
+    // If malformed or empty, clear it so the template system acts as fallback.
+    if (bp.dynamicHtmlBlock) {
+      const trimmed = bp.dynamicHtmlBlock.trim();
+      const isValid = trimmed.length > 50 && trimmed.includes('<div');
+      if (!isValid) {
+        logger.warn('[htmlRenderer] dynamicHtmlBlock failed validation (missing root <div or too short) — falling back to template system.');
+        bp.dynamicHtmlBlock = undefined;
+      } else {
+        // Strip data-render-features and data-render-statistics placeholders — the LLM
+        // renders features inline in the numbered list, so injecting them again causes duplication.
+        bp.dynamicHtmlBlock = bp.dynamicHtmlBlock
+          .replace(/<span[^>]*data-render-features[^>]*>.*?<\/span>/gi, '')
+          .replace(/<span[^>]*data-render-statistics[^>]*>.*?<\/span>/gi, '');
+        // Prevent CTA buttons from overflowing the panel — strip nowrap and inject width cap
+        bp.dynamicHtmlBlock = bp.dynamicHtmlBlock
+          .replace(/white-space:\s*nowrap\s*[;!]*/gi, 'white-space: normal;')
+          .replace(/(<button[^>]*style=")([^"]*)(max-width:[^;"]*;?\s*)/gi, '$1$2')
+          .replace(/(<button[^>]*style=")/gi, '$1max-width:100%;word-break:break-word;');
+        logger.info(`[htmlRenderer] dynamicHtmlBlock validated (${trimmed.length} chars) — using LLM-generated HTML.`);
+      }
+    }
     
     const resolvedLogo = brandLogoUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60';
     const resolvedBrandName = brandName || 'Aladdyn Social';
@@ -737,7 +805,7 @@ export async function renderAdComposite({
         itemsLi += `
           <li style="display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 12px !important; margin-bottom: 8px; width: 100% !important; text-align: left !important;" class="flex items-center gap-3 w-full text-left justify-start">
             ${badgeContent}
-            <span style="color: ${finalSubtitleColor}; font-family: '${subtitleFont}', ${subtitleFallback}; ${textShadowStyle} font-size: 0.95rem; font-weight: 500;" class="ad-feature ${contrastShieldClass} text-sm font-semibold">${el.text}</span>
+            <span style="color: ${finalSubtitleColor}; font-family: '${subtitleFont}', ${subtitleFallback}; ${textShadowStyle} font-size: 0.95rem; font-weight: 500;" class="ad-feature text-sm font-semibold">${el.text}</span>
           </li>
         `;
       });
@@ -846,6 +914,7 @@ export async function renderAdComposite({
       const hasFeaturePlaceholder = /data-render-features=['"]true['"]/i.test(bp.dynamicHtmlBlock);
       const hasStatisticPlaceholder = /data-render-statistics=['"]true['"]/i.test(bp.dynamicHtmlBlock);
 
+      // Replace explicit placeholders if the LLM used them
       bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
         /<div[^>]*data-render-features=['"]true['"][^>]*><\/div>/gi,
         featureListHtml || ''
@@ -855,9 +924,12 @@ export async function renderAdComposite({
         statisticsHtml || ''
       );
 
-      // Fallback: if the LLM forgot the feature placeholder, inject the
-      // renderer-owned SVG icon list immediately before the first CTA button.
-      if (!hasFeaturePlaceholder && featureListHtml) {
+      // Detect whether the LLM already wrote inline feature content (numbered list, ad-feature items, etc.)
+      // If it did, skip the fallback injection to prevent duplication.
+      const hasInlineFeatures = /ad-feature|ad-body|<li|<ol|numbered|step/i.test(bp.dynamicHtmlBlock);
+
+      // Only inject renderer-owned feature list if the LLM wrote NO features at all
+      if (!hasFeaturePlaceholder && !hasInlineFeatures && featureListHtml) {
         const buttonMatch = bp.dynamicHtmlBlock.match(/<button[\s\S]*?<\/button>/i);
         if (buttonMatch) {
           bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
@@ -867,10 +939,14 @@ export async function renderAdComposite({
         } else {
           bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(/<\/div>\s*$/, `${featureListHtml}</div>`);
         }
-        logger.info('Injected renderer-owned SVG feature list into dynamicHtmlBlock fallback.');
+        logger.info('Injected renderer-owned SVG feature list into dynamicHtmlBlock (LLM had no inline features).');
+      } else if (!hasFeaturePlaceholder && hasInlineFeatures) {
+        logger.info('Skipping renderer feature injection — LLM already wrote inline feature content.');
       }
 
-      if (!hasStatisticPlaceholder && statisticsHtml) {
+      // Only inject statistics if no placeholder and no inline stat content
+      const hasInlineStats = /statistic|stat-block|data-value|\d+%/i.test(bp.dynamicHtmlBlock);
+      if (!hasStatisticPlaceholder && !hasInlineStats && statisticsHtml) {
         bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(/<\/div>\s*$/, `${statisticsHtml}</div>`);
       }
     }
@@ -915,9 +991,9 @@ export async function renderAdComposite({
           }
 
           /* ===== ELEGANT TYPOGRAPHIC SIZING (PREMIUM UPDATE) ===== */
-          /* Locked at highly proportional, balanced corporate & DTC ad scale sizes */
+          /* Sensible defaults — inline styles from dynamicHtmlBlock will override these */
           .ad-headline {
-            font-size: 42px !important;
+            font-size: 42px;
             line-height: 1.15 !important;
             font-weight: 800 !important;
             letter-spacing: -0.015em !important;
@@ -926,7 +1002,7 @@ export async function renderAdComposite({
             hyphens: none !important;
           }
           .ad-subtitle {
-            font-size: 18px !important;
+            font-size: 18px;
             line-height: 1.55 !important;
             font-weight: 400 !important;
             letter-spacing: -0.005em !important;
@@ -935,7 +1011,7 @@ export async function renderAdComposite({
             hyphens: none !important;
           }
           .ad-body, .ad-feature {
-            font-size: 15px !important;
+            font-size: 15px;
             line-height: 1.5 !important;
             font-weight: 500 !important;
             word-break: keep-all !important;
@@ -943,7 +1019,7 @@ export async function renderAdComposite({
             hyphens: none !important;
           }
           .ad-badge {
-            font-size: 11px !important;
+            font-size: 11px;
             letter-spacing: 0.18em !important;
             text-transform: uppercase !important;
             font-weight: 600 !important;
@@ -953,15 +1029,43 @@ export async function renderAdComposite({
             hyphens: none !important;
           }
           .ad-cta {
-            font-size: 13px !important;
+            font-size: 13px;
             font-weight: 700 !important;
             padding: 10px 24px !important;
             text-transform: uppercase !important;
-            letter-spacing: 0.1em !important;
+            letter-spacing: 0.08em !important;
             border-radius: 6px !important;
-            white-space: nowrap !important;
-            flex-shrink: 0 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            max-width: 100% !important;
+            flex-shrink: 1 !important;
+            align-self: flex-start !important;
           }
+
+          /* ===== BRAND COLOR UTILITIES ===== */
+          :root {
+            --brand-color: ${finalBrandColor};
+            --accent-color: ${finalAccentColor};
+          }
+          .text-brand-color  { color: var(--brand-color) !important; }
+          .text-brand-accent { color: var(--accent-color) !important; }
+          .bg-brand-glass {
+            background: rgba(var(--brand-color-rgb, 99, 102, 241), 0.12) !important;
+            backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(var(--brand-color-rgb, 99, 102, 241), 0.25) !important;
+          }
+          .divider-accent {
+            display: block !important;
+            width: 48px !important;
+            height: 3px !important;
+            background: var(--accent-color) !important;
+            border-radius: 2px !important;
+            margin: 12px 0 !important;
+          }
+          /* Flex/grid helpers for multi-column layouts */
+          .ad-row    { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 12px !important; }
+          .ad-col    { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+          .ad-grid-2 { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 16px !important; }
 
           /* ===== PREMIUM SCATTERED SCRIM & CONTRAST SHIELDS ===== */
           /* High-end soft diffuse shadows that create absolute readability without harsh contours */
@@ -980,7 +1084,7 @@ export async function renderAdComposite({
           }
         </style>
         <script src="https://cdn.tailwindcss.com"></script>
-        <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+        <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.js"></script>
       </head>
       <body class="m-0 p-0 relative overflow-hidden" style="width: ${width}px; height: ${height}px; background-color: #121212;">
         
@@ -988,19 +1092,18 @@ export async function renderAdComposite({
         <img src="data:image/png;base64,${baseImageBase64}" class="w-full h-full object-cover absolute top-0 left-0 z-0" style="${bgTransform}" />
 
         <!-- Z-Index 10/30: Composite Overlay Grid Container (Typography Card) -->
-        <div class="w-full h-full absolute top-0 left-0 ${zIndexClass} ${layoutType === 'editorial_column' ? '' : 'p-14'} flex ${verticalAlign} ${horizontalAlign}">
-          
-          ${bp.dynamicHtmlBlock ? bp.dynamicHtmlBlock : `
+        <div class="w-full h-full absolute top-0 left-0 ${zIndexClass}" style="overflow:hidden; ${bp.dynamicHtmlBlock ? '' : `${layoutType === 'editorial_column' ? '' : 'padding: 56px;'} display:flex; align-items:${verticalAlign.replace('items-','') || 'flex-start'}; justify-content:${horizontalAlign.replace('justify-','') || 'flex-start'};`}">
+                    ${bp.dynamicHtmlBlock ? bp.dynamicHtmlBlock : `
           <!-- Dynamic Design Backplate -->
           <div class="${containerClass}" style="${containerStyle}">
             <!-- Ad Headline -->
-            <h1 class="ad-headline ${contrastShieldClass} ${headlineFontClass}" style="color: ${finalTextColor}; ${headlineSizeStyle}">
+            <h1 class="ad-headline ${headlineFontClass}" style="color: ${finalTextColor}; ${headlineSizeStyle}">
               ${headline}
             </h1>
 
             <!-- Ad Subtitle description (Hidden in comparison layout to save space) -->
             ${layoutType === 'split_screen' ? '' : `
-              <p class="ad-subtitle ${contrastShieldClass} ${bodyFontClass}" style="color: ${finalSubtitleColor}; opacity: 0.95; ${subtitleSizeStyle}">
+              <p class="ad-subtitle ${bodyFontClass}" style="color: ${finalSubtitleColor}; opacity: 0.95; ${subtitleSizeStyle}">
                 ${subtitle}
               </p>
             `}
@@ -1034,6 +1137,44 @@ export async function renderAdComposite({
             </button>
           </div>
           `}
+        </div>
+
+        <!-- Z-Index 40: Bottom Footer Trust Bar -->
+        <div style="position: absolute; bottom: 0; left: 0; width: 100%; z-index: 40; pointer-events: none;
+                    background: linear-gradient(to right, ${finalBrandColor}ee, ${finalAccentColor}cc);
+                    display: flex; align-items: center; justify-content: space-between;
+                    padding: 14px 32px; gap: 16px;">
+          <!-- Trust badges: prefer CopyBlueprint badge elements, then bp.features, then generic fallback -->
+          <div style="display: flex; align-items: center; gap: 20px; flex: 1;">
+            ${(() => {
+              // 1. Use badge-type elements from copyElements if available
+              const badgeElements = (copyElements || []).filter((el: any) => el.type === 'badge').map((el: any) => el.text);
+              // 2. Fall back to bp.features
+              const featureBadges = bp.features && bp.features.length > 0 ? bp.features.slice(0, 3) : [];
+              // 3. Pad with short feature text (first 3 words) if still under 3 badges
+              const featureShorts = (copyElements || [])
+                .filter((el: any) => el.type === 'feature')
+                .map((el: any) => el.text.split(/\s+/).slice(0, 3).join(' '))
+                .slice(0, 3);
+              // 4. Generic fallback
+              let badges = badgeElements.length > 0 ? badgeElements :
+                           featureBadges.length > 0 ? featureBadges : featureShorts;
+              // Ensure exactly 3 badges
+              while (badges.length < 3) badges.push(['Quality Assured', 'Made with Care', 'Trusted Brand'][badges.length]);
+              badges = badges.slice(0, 3);
+              return badges.map((badge: string) => `
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <i data-lucide="check-circle" style="width: 14px; height: 14px; color: rgba(255,255,255,0.9); flex-shrink: 0;"></i>
+                  <span style="font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.92); letter-spacing: 0.06em; text-transform: uppercase; font-family: 'Plus Jakarta Sans', sans-serif; white-space: nowrap;">${badge}</span>
+                </div>
+              `).join('');
+            })()}
+          </div>
+          <!-- CTA pill -->
+          <div style="background: rgba(255,255,255,0.95); border-radius: 8px; padding: 8px 18px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <i data-lucide="phone" style="width: 13px; height: 13px; color: ${finalBrandColor};"></i>
+            <span style="font-size: 11px; font-weight: 800; color: ${finalBrandColor}; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'Plus Jakarta Sans', sans-serif; white-space: nowrap;">${cta}</span>
+          </div>
         </div>
 
         <!-- Z-Index 20: Foreground transparent subject mask overlay (depth sandwiching with realistic cast shadow) -->

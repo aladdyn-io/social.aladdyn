@@ -35,30 +35,40 @@ POST CONTEXT:
 - Caption Draft: ${params.caption || 'No caption provided.'}
 
 YOUR GOAL:
-You must distill the essence of the caption/topic into short, punchy, high-converting visual ad copy.
-You are NOT designing HTML. You are ONLY writing the text nodes.
+Distill the caption/topic into rich, information-dense visual ad copy. The ad should feel like a premium infographic — packed with value, not sparse. Think of the target output as a magazine-quality ad with a headline, subtitle, 4-6 feature/step items, a callout quote or stat, and a CTA.
+
+MANDATORY RICHNESS RULES:
+1. primaryHeadline: 3-7 words, bold and punchy. Can be split across 2 lines for drama.
+2. secondarySubtitle: 1-2 sentences that expand on the headline with a clear value proposition.
+3. elements array: MINIMUM 5 items, MAXIMUM 8 items. Mix types for visual variety:
+   - At least 3-5 "feature" items (numbered steps, benefits, or ingredients) — each with a full descriptive sentence, not just a label
+   - At least 1 "badge" item (a short trust signal like "Dermatologist Tested", "100% Natural", "Cruelty Free")
+   - At least 1 "cta" item
+   - Optionally 1 "quote" or "statistic" for social proof
+4. Feature text should be FULL SENTENCES (15-30 words each), not just 2-3 word labels. E.g. "Cleanse with a gentle face wash to remove overnight impurities and prep your skin for the day."
+5. Badge text should be SHORT (2-4 words). E.g. "Cruelty Free", "Made for Indian Skin", "Clean Ingredients"
 
 OUTPUT FLEXIBILITY:
-You have absolute freedom over the 'elements' array. Depending on what makes sense for this specific post, you can include features, a quote from the caption, a statistic, a badge, or a CTA. Don't force features if a quote is better.
+You have freedom over the 'elements' array composition. Match the intent — for EDUCATIONAL posts use numbered steps, for PRODUCT_HIGHLIGHT use ingredient callouts, for TESTIMONIAL use a quote block.
 
 REQUIRED OUTPUT FORMAT (Return ONLY valid JSON):
 {
   "intent": "Identify the core intent (e.g., EDUCATIONAL, COMPARISON, TESTIMONIAL, PROMOTIONAL, PRODUCT_HIGHLIGHT)",
-  "primaryHeadline": "A 2-6 word powerful headline. E.g., 'The Science of Glow'",
-  "secondarySubtitle": "A 1-2 sentence compelling subheadline. E.g., 'Dermatologist backed ingredients for sensitive skin.'",
+  "primaryHeadline": "A 3-7 word powerful headline",
+  "secondarySubtitle": "A 1-2 sentence compelling subheadline with clear value proposition",
   "elements": [
     {
       "type": "feature | quote | statistic | badge | paragraph | cta",
-      "text": "The actual text",
-      "icon": "A relevant emoji (optional, use sparingly and only if it fits the brand tone)",
-      "iconName": "A Lucide icon name that visually represents this element. Choose from: shield-check, zap, brain, heart, star, award, target, trending-up, clock, users, globe, sparkles, check-circle, flask-conical, leaf, sun, eye, lock, rocket, bar-chart-2, palette, gem, crown, thumbs-up, lightbulb, microscope, droplets, wind, flame, layers",
+      "text": "The actual text — full sentences for features, short labels for badges. FOR CTA TYPE: MAXIMUM 5 WORDS. Examples: 'Shop Now', 'Try It Today', 'Get Started →', 'Book Free Demo'. Never write a full sentence as a CTA.",
+      "icon": "A relevant emoji (optional, use sparingly)",
+      "iconName": "A Lucide icon name. Choose from: shield-check, zap, brain, heart, star, award, target, trending-up, clock, users, globe, sparkles, check-circle, flask-conical, leaf, sun, eye, lock, rocket, bar-chart-2, palette, gem, crown, thumbs-up, lightbulb, microscope, droplets, wind, flame, layers",
       "value": "For statistics only: the big number like '40%' or '100+' or '3x'",
-      "isNegative": "Boolean. True ONLY if this highlights a negative trait (e.g. 'No parabens', 'Zero downtime', 'Without toxic chemicals'). False otherwise."
+      "isNegative": "Boolean. True ONLY if this highlights a negative trait (e.g. 'No parabens'). False otherwise."
     }
   ]
 }
 
-CRITICAL: Return ONLY the JSON object. No markdown backticks, no prose.`;
+CRITICAL: Return ONLY the JSON object. No markdown backticks, no prose. The elements array MUST have at least 5 items.`;
 
   try {
     const response = await callLlm({
@@ -71,7 +81,8 @@ CRITICAL: Return ONLY the JSON object. No markdown backticks, no prose.`;
         { role: 'user', content: prompt }
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.7
+      temperature: 0.7,
+      max_tokens: 1200
     });
 
     let raw = response.choices[0]?.message?.content;
