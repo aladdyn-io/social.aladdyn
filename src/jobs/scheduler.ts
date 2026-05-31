@@ -19,47 +19,88 @@ const logger = createLogger({ service: 'scheduler' });
 
 const LOOKAHEAD_MINUTES = 5; // enqueue posts up to 5 min before their target time
 
+/**
+ * Combines a post's scheduled date (midnight) and scheduled time string ("HH:MM")
+ * in its specified timezone, resolving the correct absolute UTC Date.
+ */
+export function getPostTargetDateTime(scheduledDate: Date, scheduledTime: string, timezone = 'Asia/Kolkata'): Date {
+  const [hours, minutes] = scheduledTime.split(':').map(Number);
+  
+  // Construct the target date at the given time in UTC
+  const year = scheduledDate.getUTCFullYear();
+  const month = scheduledDate.getUTCMonth();
+  const day = scheduledDate.getUTCDate();
+  
+  const utcDate = new Date(Date.UTC(year, month, day, hours, minutes, 0));
+  
+  try {
+    // Format this UTC date in the target timezone to calculate the local offset
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(utcDate);
+    const partMap: Record<string, string> = {};
+    for (const part of parts) {
+      partMap[part.type] = part.value;
+    }
+    
+    // Parse the formatted local parts
+    const fYear = parseInt(partMap.year, 10);
+    const fMonth = parseInt(partMap.month, 10) - 1; // 0-indexed
+    const fDay = parseInt(partMap.day, 10);
+    let fHour = parseInt(partMap.hour, 10);
+    const fMinute = parseInt(partMap.minute, 10);
+    
+    // Handle standard midnight representation variations (e.g. 24 hour wrap-around)
+    if (fHour === 24) {
+      fHour = 0;
+    }
+    
+    // Reconstruct as a UTC timestamp
+    const formattedDate = new Date(Date.UTC(fYear, fMonth, fDay, fHour, fMinute, 0));
+    
+    // The difference is the local timezone offset
+    const offsetMs = formattedDate.getTime() - utcDate.getTime();
+    
+    // The correct UTC time is utcDate - offsetMs
+    return new Date(utcDate.getTime() - offsetMs);
+  } catch (err) {
+    // Robust fallback
+    const target = new Date(Date.UTC(year, month, day, hours, minutes, 0));
+    if (timezone === 'Asia/Kolkata') {
+      return new Date(target.getTime() - 5.5 * 60 * 60 * 1000);
+    }
+    return target;
+  }
+}
+
 export async function scheduleUpcomingPosts(): Promise<void> {
   const now = new Date();
   const lookahead = new Date(now.getTime() + LOOKAHEAD_MINUTES * 60 * 1_000);
 
-  // Auto-approve DRAFT posts that have reached (or passed) their scheduled time.
-  // This implements "if not approved by posting date, post automatically".
-  const draftOverdue = await prisma.socialPost.findMany({
-    where: {
-      status: 'DRAFT',
-      scheduledDate: { lte: lookahead },
-      NOT: { contentType: 'written' },
-    },
-    take: 50,
-  });
+  // Find APPROVED posts scheduled for any date up to 2 days after now to safely cover all timezone boundaries
+  const maxDate = new Date(lookahead.getTime() + 2 * 24 * 60 * 60 * 1000);
 
-  if (draftOverdue.length > 0) {
-    logger.info('Auto-approving overdue DRAFT posts', { count: String(draftOverdue.length) });
-    for (const post of draftOverdue) {
-      await prisma.socialPost
-        .update({
-          where: { id: post.id },
-          data: { status: 'APPROVED', approvedAt: new Date() },
-        })
-        .catch((err) =>
-          logger.error('Failed to auto-approve post', {
-            postId: post.id,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        );
-    }
-  }
-
-  // Find APPROVED posts whose scheduled time is within the lookahead window
-  // Exclude 'written' contentType — Instagram has no text-only post type
-  const posts = await prisma.socialPost.findMany({
+  const approvedCandidates = await prisma.socialPost.findMany({
     where: {
       status: 'APPROVED',
-      scheduledDate: { lte: lookahead },
-      NOT: { contentType: 'written' },
+      scheduledDate: { lte: maxDate },
     },
-    take: 50, // safety cap per tick
+    take: 100,
+  });
+
+  // Filter candidates that are actually within the lookahead window based on time
+  const posts = approvedCandidates.filter((post) => {
+    const target = getPostTargetDateTime(post.scheduledDate, post.scheduledTime, post.timezone);
+    return target.getTime() <= lookahead.getTime();
   });
 
   if (posts.length === 0) return;
@@ -67,7 +108,8 @@ export async function scheduleUpcomingPosts(): Promise<void> {
   logger.info('Enqueueing upcoming posts', { count: String(posts.length) });
 
   for (const post of posts) {
-    const delay = Math.max(0, post.scheduledDate.getTime() - now.getTime());
+    const targetDateTime = getPostTargetDateTime(post.scheduledDate, post.scheduledTime, post.timezone);
+    const delay = Math.max(0, targetDateTime.getTime() - now.getTime());
 
     // Mark as SCHEDULED immediately to prevent double-enqueue
     await prisma.socialPost.update({

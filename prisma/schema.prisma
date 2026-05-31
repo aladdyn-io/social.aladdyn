@@ -50,6 +50,10 @@ model SocialCampaign {
   igUserId    String? // IG Business/Creator account ID
   accessToken String? @db.Text // long-lived user access token (store encrypted at rest)
 
+  // OAuth-connected social account (optional — overrides igUserId/accessToken when set)
+  socialAccountId String?
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id])
+
   // AI options
   festivalEnabled Boolean      @default(true)
   goal            CampaignGoal @default(AWARENESS)
@@ -61,10 +65,13 @@ model SocialCampaign {
 
   strategy SocialStrategy?
   posts    SocialPost[]
+  pipelineRun PipelineRun?
+  tokenLedger CampaignTokenLedger?
 
   @@index([funnelId])
   @@index([userId])
   @@index([status])
+  @@index([socialAccountId])
   @@map("social_campaigns")
   @@schema("social")
 }
@@ -75,6 +82,52 @@ enum CampaignGoal {
   CONVERSION
   RETENTION
 
+  @@schema("social")
+}
+
+// ── OAuth-Connected Social Accounts ──────────────────────────────────────────
+// One row per platform account per user. Created/updated via OAuth callback.
+// Tokens are stored AES-256-GCM encrypted; decryption happens at publish time.
+
+enum SocialAccountPlatform {
+  LINKEDIN
+  INSTAGRAM
+
+  @@schema("social")
+}
+
+model SocialAccount {
+  id        String                @id @default(uuid())
+  userId    String                // FK → users.id in server.aladdyn (cross-service)
+  platform  SocialAccountPlatform
+
+  // Platform-specific identifiers
+  platformAccountId String  // IG Business Account ID  OR  LinkedIn member sub (from /v2/userinfo)
+  authorUrn         String? // LinkedIn posting URN: "urn:li:person:xxx" or "urn:li:organization:xxx"
+  accountName       String  // Display name shown in UI
+  accountHandle     String? // @username or LinkedIn vanity URL
+  profilePictureUrl String?
+
+  // Encrypted OAuth credentials
+  // Values are AES-256-GCM encrypted via oauthService.encryptToken()
+  accessToken      String  @db.Text
+  refreshToken     String? @db.Text // LinkedIn only (60-day refresh)
+  tokenExpiresAt   DateTime? // null = indefinitely long-lived (Meta Page tokens)
+
+  // Extra platform metadata (e.g. { pageId, pageName } for IG-linked FB pages)
+  metadata Json?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Campaigns linked to this connected account
+  campaigns SocialCampaign[]
+
+  @@unique([userId, platform, platformAccountId])
+  @@index([userId, platform])
+  @@index([isActive])
+  @@map("social_accounts")
   @@schema("social")
 }
 
@@ -135,6 +188,11 @@ model SocialPost {
   imageUrl       String? // MinIO URL after generation
   imageGenerated Boolean @default(false)
   imageModel     String?
+
+  // Video lifecycle
+  videoPrompt  String?  @map("video_prompt") @db.Text
+  mediaType    String   @map("media_type") @default("image")
+  isFallback   Boolean  @map("is_fallback") @default(false)
 
   // Metadata
   contentPillar String?
@@ -217,5 +275,92 @@ model SocialEngagement {
   @@index([postId])
   @@index([leadSignalSentAt])
   @@map("social_engagements")
+  @@schema("social")
+}
+
+// ── Upgraded Pipeline State Tracking ──────────────────────────────────────────
+
+model PipelineRun {
+  id            String               @id @default(uuid())
+  campaignId    String               @unique
+  campaign      SocialCampaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status        PipelineStatus       @default(PENDING)
+  brandInput    Json
+  createdAt     DateTime             @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  stages        PipelineStageOutput[]
+
+  @@map("pipeline_runs")
+  @@schema("social")
+}
+
+model PipelineStageOutput {
+  id            String         @id @default(uuid())
+  runId         String
+  pipelineRun   PipelineRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stageName     String
+  status        StageStatus    @default(PENDING)
+  outputJson    Json?
+  errorMessage  String?        @db.Text
+  attemptCount  Int            @default(0)
+  completedAt   DateTime?
+
+  @@unique([runId, stageName])
+  @@map("pipeline_stage_outputs")
+  @@schema("social")
+}
+
+enum PipelineStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+
+  @@schema("social")
+}
+
+enum StageStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  OVERRIDDEN
+
+  @@schema("social")
+}
+
+// ── Regeneration Token System ─────────────────────────────────────────────────
+
+model CampaignTokenLedger {
+  id         String   @id @default(uuid())
+  campaignId String   @unique @map("campaign_id")
+  balance    Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  campaign     SocialCampaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  transactions CampaignTokenTransaction[]
+
+  @@map("campaign_token_ledgers")
+  @@schema("social")
+}
+
+model CampaignTokenTransaction {
+  id           String   @id @default(uuid())
+  campaignId   String   @map("campaign_id")
+  ledgerId     String   @map("ledger_id")
+  type         String
+  amount       Int
+  balanceAfter Int      @map("balance_after")
+  description  String
+  postId       String?  @map("post_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ledger CampaignTokenLedger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@map("campaign_token_transactions")
   @@schema("social")
 }

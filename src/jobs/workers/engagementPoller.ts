@@ -303,7 +303,7 @@ export function startEngagementPollWorker(): Worker<EngagementPollJobData> {
     processEngagementPoll,
     {
       connection: redisConnection,
-      concurrency: 3,
+      concurrency: 1,
     }
   );
 

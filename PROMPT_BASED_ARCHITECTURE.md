@@ -473,20 +473,55 @@ for (const post of posts) {
 ## Next Steps
 
 1. ✅ Migration applied
-2. ✅ Code updated
-3. ✅ API endpoints added
-4. 🔄 Update frontend to use new workflow
-5. 🔄 Add batch image generation endpoint (optional)
-6. 🔄 Add progress tracking for image generation
-7. 🔄 Add image regeneration feature
+2. ✅ Code updated and tested
+3. ✅ REST API endpoints integrated
+4. ✅ Diagnostic console updated with frosted glass overlays and theme selectors
+5. ✅ Chronological Content Calendar UI Planner integrated into `demo.html`
 
-## Questions?
+---
 
-This is a major architectural improvement that provides:
+## 🎨 Stage Engine v2: High-Fidelity 3D Composition & Quality Gating
 
-- ⚡ Faster response times
-- 🎯 Better image accuracy
-- 💰 Cost optimization
-- ✨ More user control
+We have successfully integrated a native, high-fidelity **Stage Engine v2** pipeline into the Express orchestrator. This introduces advanced computer vision, layout orchestration, and deterministic quality gates:
 
-The system is 100% backward compatible - existing images continue to work, and the workflow is completely transparent to users.
+### 1. The Z-Index 3D Sandwich Compositor
+Playwright is utilized as an absolute-layering canvas engine:
+* **Z-0 (Background)**: The raw, AI-generated background scene based on the detailed prompt.
+* **Z-5 (Backdrop Watermark)**: A large display brand name or keyword positioned behind the subject cutout but in front of the background.
+* **Z-10 (Dynamic Typography)**: Layout Director LLM-driven typography (frost-glass cards, Google Fonts compilation, A/B theme archetypes like classic, feature lists, magazine columns, split-screen comparisons).
+* **Z-20 (Foreground Silhouette Cutout)**: Transparent foreground subject silhouette isolated by `@imgly/background-removal-node` ONNX models. Injected with realistic `filter: drop-shadow(...)` filters to cast soft shadows onto background typography.
+
+```
+                  [ Z-20 Foreground Product Mask (ONNX) ] ── (Casts drop shadow)
+                                   ↓
+                  [ Z-10 Dynamic Typography Overlay     ]
+                                   ↓
+                  [ Z-5  Elegant Brand Watermark        ]
+                                   ↓
+                  [ Z-0  Base AI Image Background       ]
+```
+
+### 2. Double-Pass Quality Gate Orchestrator
+To ensure zero visual prompt hallucinations or garbled lettering on packaging:
+1. **OCR Gate (`tesseract.js` WebAssembly)**: Scans the AI background. If legible gibberish text ($\ge 4$ characters) is detected, it fails the gate.
+2. **Detail Complexity Solver (`sharp` variance)**: Conversions to grayscale measure standard deviation of intensity to discard overly busy/noisy or flat compositions.
+3. **Color Sampler Check**: Measures average distance of coordinates against brand colors using Euclidean color differences.
+4. **Auto Re-Roll**: If the gate is failed, the orchestrator triggers a silent, single re-roll to compile a cleaner background.
+
+### 3. Chronological Calendar Planner Tab
+A highly optimized javascript scheduler inside `demo.html` groups posts by YYYY-MM-DD and renders month grids. It color-codes scheduled slots (`IG` = Pink, `LN` = Blue), provides visual status dots (Green = Rendered, Yellow = Pending), and features click-to-scroll highlight anchors to sync with grid cards seamlessly.
+
+### 4. Liquid HTML Layout Overlay Engine
+To support high-fashion editorial layouts and punchy youth-focused D2C advertisements (similar to Glossier, Hey Bud, Bite, or Blume), the LLM can generate a customized, Tailwind CSS-styled HTML block directly inside the `dynamicHtmlBlock` field of the `LayoutBlueprint`.
+* **Dynamic Styling**: Bypasses the pre-coded layout templates (`classic`, `feature_list`, `split_screen`) entirely.
+* **Custom Typography**: Enables loading display fonts (e.g. `Lobster`, `Bebas Neue`, `Pacifico`) and wrapping keywords in custom span tags highlighting the campaign's accent colors.
+* **Advanced Visual Accents**: Generates interactive rating star grids (`★★★★★`), lightweight review speech bubbles, and styled button pills natively.
+
+### 5. High-Fashion Cursive Typography, Badges & CTA Upgrades (Fully Implemented)
+The visual compositing capabilities have been further enhanced with three premium layout styling systems driven dynamically by the LLM Layout Director:
+* **Dynamic Cursive Script Highlights**: Support for elegant handwritten highlighting fonts (`Caveat` and `Pacifico`) styled dynamically with organic slants and rotations (`transform: rotate(-1.5deg)`). Words wrapped in `<span class="font-script text-accent-color">` inside headlines or subtitles automatically render in high-fashion scripts utilizing the chosen campaign accent color override.
+* **Premium Checklist Badges**: Built custom checklist badge modes including `"solid"` (vibrant accent-colored circular checkmark shields with white outline icons) and `"double_ring"` (highly refined concentric double rings with thin outer outline borders and stroke icons) chosen dynamically by the LLM via `badgeStyle`.
+* **Luxury CTA Pill Buttons**: Engineered buttons to support pill styling (`rounded-full`) and premium leading white circular arrow containers housing brand-colored action arrows (`→`) when the LLM selects `ctaIconStyle: 'circular_arrow'`.
+
+
+

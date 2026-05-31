@@ -217,3 +217,66 @@ export async function getFestivalsForDateRange(
   
   return filtered;
 }
+
+/**
+ * Maps any common country name or abbreviation to its ISO 3166-1 2-letter country code.
+ * Supported by Calendarific for holiday fetching.
+ */
+export function getCountryCode(geography: string): string {
+  if (!geography) return 'IN';
+  
+  const clean = geography.trim().toLowerCase();
+  
+  const directMapping: Record<string, string> = {
+    in: 'IN',
+    india: 'IN',
+    bharat: 'IN',
+    us: 'US',
+    usa: 'US',
+    'united states': 'US',
+    'united states of america': 'US',
+    america: 'US',
+    gb: 'GB',
+    uk: 'GB',
+    'united kingdom': 'GB',
+    great_britain: 'GB',
+    ca: 'CA',
+    canada: 'CA',
+    au: 'AU',
+    australia: 'AU',
+    sg: 'SG',
+    singapore: 'SG',
+    ae: 'AE',
+    uae: 'AE',
+    'united arab emirates': 'AE',
+    dubai: 'AE',
+    nz: 'NZ',
+    'new zealand': 'NZ',
+    za: 'ZA',
+    'south africa': 'ZA',
+    de: 'DE',
+    germany: 'DE',
+    fr: 'FR',
+    france: 'FR',
+    jp: 'JP',
+    japan: 'JP',
+    my: 'MY',
+    malaysia: 'MY',
+  };
+
+  if (directMapping[clean]) {
+    return directMapping[clean];
+  }
+
+  // Common keyword containment searches
+  if (clean.includes('india') || clean.includes('bharat') || clean === 'in') return 'IN';
+  if (clean.includes('state') || clean.includes('usa') || clean.includes('america') || clean === 'us') return 'US';
+  if (clean.includes('kingdom') || clean.includes('uk') || clean.includes('britain') || clean === 'gb') return 'GB';
+  if (clean.includes('canada') || clean === 'ca') return 'CA';
+  if (clean.includes('australia') || clean === 'au') return 'AU';
+  if (clean.includes('singapore') || clean === 'sg') return 'SG';
+  if (clean.includes('emirates') || clean.includes('uae') || clean.includes('dubai') || clean === 'ae') return 'AE';
+  if (clean.includes('zealand') || clean === 'nz') return 'NZ';
+  
+  return 'IN';
+}

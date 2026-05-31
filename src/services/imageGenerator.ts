@@ -10,7 +10,6 @@
  */
 
 import axios from 'axios';
-import Replicate from 'replicate';
 import sharp from 'sharp';
 import { CalendarItem } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
@@ -310,7 +309,7 @@ class DeepAIGenerator implements ImageGenerator {
  * WHY: Replicate has reliable API, good free tier, FLUX model available
  */
 class ReplicateGenerator implements ImageGenerator {
-  private readonly replicate: Replicate;
+  private readonly token: string;
   private readonly model = 'black-forest-labs/flux-schnell';
 
   constructor() {
@@ -318,9 +317,7 @@ class ReplicateGenerator implements ImageGenerator {
     if (!token) {
       throw new Error('REPLICATE_API_TOKEN environment variable is required');
     }
-    this.replicate = new Replicate({
-      auth: token,
-    });
+    this.token = token;
   }
 
   /** Generate using a fully-formed detailed prompt (on-demand path). */
@@ -333,38 +330,78 @@ class ReplicateGenerator implements ImageGenerator {
   }
 
   private async runReplicate(fullPrompt: string): Promise<ImageGenerationResult> {
-    console.log(`[ImageGenerator] Generating with Replicate (${this.model})...`);
+    console.log(`[ImageGenerator] Generating with Replicate (${this.model}) using Axios...`);
     console.log(`[ImageGenerator] Prompt: ${fullPrompt.substring(0, 100)}...`);
 
     try {
-      const output: any = await this.replicate.run(
-        this.model as any,
-        {
-          input: {
-            prompt: fullPrompt,
-            num_outputs: 1,
-            aspect_ratio: '1:1',
-            output_format: 'png',
-            output_quality: 80,
-          },
-        }
-      );
+      let url = 'https://api.replicate.com/v1/predictions';
+      let payload: any = {
+        input: {
+          prompt: fullPrompt,
+          num_outputs: 1,
+          aspect_ratio: '1:1',
+          output_format: 'png',
+          output_quality: 80,
+        },
+      };
 
-      // Replicate returns an array of URLs
+      if (this.model.includes('/')) {
+        url = `https://api.replicate.com/v1/models/${this.model}/predictions`;
+      } else {
+        payload.version = this.model;
+      }
+
+      const response = await axios.post(url, payload, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait',
+        },
+        timeout: 45000,
+      });
+
+      let prediction = response.data;
+      const maxAttempts = 40;
+      let attempts = 0;
+
+      while (
+        (prediction.status === 'starting' || prediction.status === 'processing') &&
+        attempts < maxAttempts
+      ) {
+        console.log(`[ImageGenerator] Polling Replicate prediction status: ${prediction.status} (attempt ${attempts + 1})...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        attempts++;
+
+        const pollResponse = await axios.get(prediction.urls.get, {
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+          },
+          timeout: 15000,
+        });
+        prediction = pollResponse.data;
+      }
+
+      if (prediction.status !== 'succeeded') {
+        throw new Error(
+          `Replicate prediction ended with status: ${prediction.status}. Error: ${prediction.error || 'Unknown error'}`
+        );
+      }
+
+      const output = prediction.output;
       const imageUrl = Array.isArray(output) ? output[0] : output;
       
       if (!imageUrl) {
-        throw new Error('Replicate returned no image URL');
+        throw new Error('Replicate returned no image URL in output');
       }
 
       // Download the image
       console.log(`[ImageGenerator] Downloading from ${imageUrl}...`);
-      const response = await axios.get(imageUrl, {
+      const imgResponse = await axios.get(imageUrl, {
         responseType: 'arraybuffer',
         timeout: 30000,
       });
 
-      const imageBuffer = Buffer.from(response.data);
+      const imageBuffer = Buffer.from(imgResponse.data);
       
       console.log(`[ImageGenerator] ✓ Generated image (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
 
@@ -380,7 +417,8 @@ class ReplicateGenerator implements ImageGenerator {
         },
       };
     } catch (error: any) {
-      console.error('[ImageGenerator] ✗ Generation failed:', error.message);
+      const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message;
+      console.error('[ImageGenerator] ✗ Generation failed:', errorMsg);
 
       if (error.response?.status === 401) {
         throw new Error(
@@ -397,7 +435,7 @@ class ReplicateGenerator implements ImageGenerator {
       }
 
       throw new Error(
-        `Replicate API error: ${error.message}`
+        `Replicate API error: ${errorMsg}`
       );
     }
   }

@@ -12,10 +12,58 @@ import prisma from '../../lib/prisma';
 import { redisConnection } from '../redis';
 import { QUEUE_NAMES, PublishJobData, engagementPollQueue } from '../queues';
 import { publishToInstagram, IgContentType } from '../../services/instagramPublisher';
+import { publishToLinkedIn as publishDirectToLinkedIn } from '../../services/linkedinPublisher';
+import { decryptToken, ensureFreshInstagramToken } from '../../services/oauthService';
 import { createLogger } from '../../utils/logger';
 import { createPublishLog } from '../../db/database';
+import { SocialAccountPlatform } from '@prisma/client';
 
 const logger = createLogger({ service: 'publish-worker' });
+
+// ── OAuth credential resolution ────────────────────────────────────────────────
+
+/**
+ * Looks up the most recent active SocialAccount for this user+platform.
+ * Returns { accessToken, authorUrn/igUserId } if found, null otherwise.
+ * For Instagram accounts, automatically refreshes tokens nearing expiry.
+ * Always decrypts before returning — the worker never touches raw ciphertext.
+ */
+async function resolveOAuthCredentials(
+  userId: string,
+  platform: SocialAccountPlatform
+): Promise<{ accessToken: string; authorUrn: string | null; platformAccountId: string } | null> {
+  const account = await prisma.socialAccount.findFirst({
+    where: { userId, platform, isActive: true },
+    orderBy: { updatedAt: 'desc' }, // most recently refreshed first
+    select: { id: true, accessToken: true, authorUrn: true, platformAccountId: true, tokenExpiresAt: true },
+  });
+
+  if (!account) return null;
+
+  try {
+    let accessToken: string;
+
+    if (platform === SocialAccountPlatform.INSTAGRAM) {
+      // Auto-refresh Instagram tokens that are near expiry or expired
+      accessToken = await ensureFreshInstagramToken(
+        account.id,
+        account.accessToken,
+        account.tokenExpiresAt
+      );
+    } else {
+      accessToken = decryptToken(account.accessToken);
+    }
+
+    return { accessToken, authorUrn: account.authorUrn, platformAccountId: account.platformAccountId };
+  } catch (err) {
+    logger.error('Failed to resolve SocialAccount token — skipping OAuth credentials', {
+      userId,
+      platform,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
 
 /**
  * Classifies a publish error into a user-friendly message and decides
@@ -104,10 +152,23 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
     let fallbackNote: string | null = null;
 
     if (platform === 'instagram') {
-      const { igUserId, accessToken, funnelId } = post.campaign;
+      const { igUserId, accessToken: campaignToken, funnelId } = post.campaign;
 
-      if (!igUserId || !accessToken) {
-        // No Instagram credentials — fall back to LinkedIn if the campaign has a funnelId
+      // ── Credential resolution (OAuth > campaign fields > funnelId fallback) ──
+      const oauthCreds = await resolveOAuthCredentials(post.campaign.userId, SocialAccountPlatform.INSTAGRAM);
+
+      const resolvedIgUserId  = oauthCreds?.platformAccountId ?? igUserId;
+      const resolvedToken     = oauthCreds?.accessToken       ?? campaignToken;
+
+      if (oauthCreds) {
+        logger.info('Using OAuth SocialAccount credentials for Instagram', {
+          postId,
+          igUserId: resolvedIgUserId,
+        });
+      }
+
+      if (!resolvedIgUserId || !resolvedToken) {
+        // No credentials at all — fall back to LinkedIn if the campaign has a funnelId
         if (funnelId) {
           logger.warn(
             'No Instagram credentials — falling back to LinkedIn publish',
@@ -118,31 +179,67 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
         } else {
           throw new Error(
             `Campaign ${campaignId} has no Instagram credentials. ` +
-              'Connect an Instagram account before publishing.'
+              'Connect an Instagram account via the OAuth flow before publishing.'
           );
         }
       } else {
+        const imageUrl = (() => {
+          if (!post.imageUrl) return undefined;
+          const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+          if (publicEndpoint && (post.imageUrl.includes('localhost:9000') || post.imageUrl.includes('127.0.0.1:9000'))) {
+            return post.imageUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1):9000/, publicEndpoint);
+          }
+          return post.imageUrl;
+        })();
+
         const result = await publishToInstagram({
-          igUserId,
-          accessToken,
+          igUserId: resolvedIgUserId,
+          accessToken: resolvedToken,
           contentType: post.contentType as IgContentType,
           caption: buildCaption(post.caption, post.hashtags),
-          imageUrl: post.imageUrl ?? undefined,
+          imageUrl,
           shareToFeed: true,
         });
-
         platformPostId = result.mediaId;
       }
     } else if (platform === 'linkedin') {
       const { funnelId } = post.campaign;
 
-      if (!funnelId) {
+      // ── Credential resolution (OAuth > env vars > funnelId service fallback) ──
+      const oauthCreds  = await resolveOAuthCredentials(post.campaign.userId, SocialAccountPlatform.LINKEDIN);
+      const envToken    = process.env.LINKEDIN_ACCESS_TOKEN;
+      const envUrn      = process.env.LINKEDIN_MEMBER_URN;
+
+      if (oauthCreds) {
+        // Priority 1: OAuth-connected SocialAccount (the whole point of this integration)
+        logger.info('Using OAuth SocialAccount credentials for LinkedIn', {
+          postId,
+          authorUrn: oauthCreds.authorUrn,
+        });
+        platformPostId = await publishDirectToLinkedIn({
+          accessToken: oauthCreds.accessToken,
+          memberUrn: oauthCreds.authorUrn ?? `urn:li:person:${oauthCreds.platformAccountId}`,
+          text: buildCaption(post.caption, post.hashtags),
+          imageUrl: post.imageUrl ?? undefined,
+        });
+      } else if (envToken && envUrn) {
+        // Priority 2: Legacy env-var credentials (backwards compatibility)
+        logger.info('Using legacy env-var credentials for LinkedIn (no OAuth account connected)', { postId });
+        platformPostId = await publishDirectToLinkedIn({
+          accessToken: envToken,
+          memberUrn: envUrn,
+          text: buildCaption(post.caption, post.hashtags),
+          imageUrl: post.imageUrl ?? undefined,
+        });
+      } else if (funnelId) {
+        // Priority 3: Route through the linkedin.aladdyn microservice
+        platformPostId = await publishViaLinkedIn({ post, funnelId, campaignId });
+      } else {
         throw new Error(
-          `Campaign ${campaignId} has no funnelId — cannot route to LinkedIn service`
+          `Campaign ${campaignId} has no LinkedIn credentials. ` +
+            'Connect a LinkedIn account via the OAuth flow, or set LINKEDIN_ACCESS_TOKEN in .env.'
         );
       }
-
-      platformPostId = await publishViaLinkedIn({ post, funnelId, campaignId });
     } else {
       throw new Error(`Platform "${platform}" is not supported`);
     }
@@ -189,6 +286,18 @@ async function processPublish(job: Job<PublishJobData>): Promise<void> {
     }
   } catch (err) {
     const rawMessage = err instanceof Error ? err.message : String(err);
+    // Surface the FULL error prominently in the console
+    console.error(`\n╔══════════════════════════════════════════════════════════════╗`);
+    console.error(`║  PUBLISH ERROR DETAILS — ${platform} — postId: ${postId}`);
+    console.error(`╠══════════════════════════════════════════════════════════════╣`);
+    console.error(`║  Message: ${rawMessage}`);
+    if ((err as any)?.response?.data) {
+      console.error(`║  API Response:`, JSON.stringify((err as any).response.data, null, 2));
+    }
+    if ((err as any)?.response?.status) {
+      console.error(`║  HTTP Status: ${(err as any).response.status}`);
+    }
+    console.error(`╚══════════════════════════════════════════════════════════════╝\n`);
     logger.error('Publish failed', { postId, platform, error: rawMessage });
 
     // Classify the failure so the user sees an actionable error message
@@ -242,6 +351,10 @@ async function publishViaLinkedIn(params: {
   const caption = buildCaption(post.caption, post.hashtags);
   const scheduledAt = `${post.scheduledDate.toISOString().split('T')[0]}T${post.scheduledTime}:00`;
 
+  const imageUrls = post.imageUrl
+    ? (post.imageUrl.includes(',') ? post.imageUrl.split(',') : [post.imageUrl])
+    : [];
+
   const liRes = await fetch(`${linkedinServiceUrl}/internal/posts/create-from-social`, {
     method: 'POST',
     headers: {
@@ -251,7 +364,7 @@ async function publishViaLinkedIn(params: {
     body: JSON.stringify({
       funnelId,
       text: caption,
-      imageUrls: post.imageUrl ? [post.imageUrl] : [],
+      imageUrls,
       scheduledAt,
     }),
   });
@@ -278,7 +391,7 @@ function buildCaption(caption: string | null, hashtags: string[]): string {
 export function startPublishWorker(): Worker<PublishJobData> {
   const worker = new Worker<PublishJobData>(QUEUE_NAMES.PUBLISH, processPublish, {
     connection: redisConnection,
-    concurrency: 3,
+    concurrency: 1,
   });
 
   worker.on('completed', (job) => {
@@ -289,6 +402,6 @@ export function startPublishWorker(): Worker<PublishJobData> {
     logger.error('Job failed', { jobId: job?.id ?? '', error: err.message });
   });
 
-  logger.info('Started', { concurrency: '3' });
+  logger.info('Started', { concurrency: '1' });
   return worker;
 }

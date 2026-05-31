@@ -34,8 +34,10 @@ export interface NormalizedInput {
   education_weight: number;
   promo_weight: number;
   platform: string;
+  platforms?: string[];
   timezone: string;
   scheduledTime: string;
+  contentMix?: any;
 }
 
 /**
@@ -80,7 +82,7 @@ export function normalizeInput(input: ContentInput): NormalizedInput {
   // WHY: Total number of posts needed based on duration and frequency
   // ========================================================================
 
-  const posting_days = Math.floor((input.frequency_per_week / 7) * input.total_days);
+  const posting_days = Math.max(1, Math.floor((input.frequency_per_week / 7) * input.total_days));
 
   // ========================================================================
   // DETERMINE BRAND_STAGE
@@ -112,6 +114,7 @@ export function normalizeInput(input: ContentInput): NormalizedInput {
   // ========================================================================
 
   const platform = input.platform ?? 'instagram';
+  const platforms = input.platforms ?? [platform];
   const timezone = input.timezone ?? 'Asia/Kolkata';
   const scheduledTime = input.scheduledTime ?? '10:00';
 
@@ -138,7 +141,9 @@ export function normalizeInput(input: ContentInput): NormalizedInput {
     education_weight,
     promo_weight,
     platform,
+    platforms,
     timezone,
     scheduledTime,
+    contentMix: input.contentMix,
   };
 }

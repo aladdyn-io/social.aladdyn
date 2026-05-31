@@ -12,7 +12,7 @@
  */
 
 import { updatePostImage } from '../db/database';
-import { generateImage, ImageGenerationResult } from './imageGenerator';
+import { generateImage, generateImageFromPrompt, ImageGenerationResult } from './imageGenerator';
 import { uploadImageToStorage } from './objectStorage';
 import pkg from 'pg';
 const { Pool } = pkg;
@@ -117,7 +117,14 @@ export async function generateImageForPost(postId: string): Promise<GenerateImag
       base_color: '#764ba2',
     };
 
-    const imageResult: ImageGenerationResult = await generateImage(calendarItem, normalizedInput);
+    let imageResult: ImageGenerationResult;
+    if (post.image_prompt) {
+      console.log(`[GenerateImageForPost] Generating image using stored rich visual prompt...`);
+      imageResult = await generateImageFromPrompt(post.image_prompt);
+    } else {
+      console.log(`[GenerateImageForPost] No stored rich prompt. Generating using fallback topic descriptors...`);
+      imageResult = await generateImage(calendarItem, normalizedInput);
+    }
     console.log(`[GenerateImageForPost] ✓ Image generated (${imageResult.metadata.model})`);
 
     // ======================================================================

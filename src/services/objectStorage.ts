@@ -104,7 +104,8 @@ function formatMinioError(error: unknown): string {
  */
 export async function uploadImageToStorage(
   image: ImageGenerationResult,
-  prefix: string = 'posts/'
+  prefix: string = 'posts/',
+  mimeType: string = 'image/png'
 ): Promise<string> {
   if (storageType !== 'minio') {
     return generatePlaceholderUrl(image);
@@ -135,7 +136,7 @@ export async function uploadImageToStorage(
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        return await uploadToMinIO(image, prefix);
+        return await uploadToMinIO(image, prefix, mimeType);
       } catch (error) {
         lastError = error;
         const details = formatMinioError(error);
@@ -177,7 +178,8 @@ function generatePlaceholderUrl(image: ImageGenerationResult): string {
  */
 async function uploadToMinIO(
   image: ImageGenerationResult,
-  prefix: string = 'posts/'
+  prefix: string = 'posts/',
+  mimeType: string = 'image/png'
 ): Promise<string> {
   try {
     // Ensure bucket exists
@@ -187,10 +189,13 @@ async function uploadToMinIO(
       console.log(`[ObjectStorage] Created bucket: ${bucketName}`);
     }
 
+    // Derive file extension from MIME type
+    const ext = mimeType === 'video/mp4' ? 'mp4' : 'png';
+
     // Generate unique object key
     const timestamp = Date.now();
     const uniqueId = uuidv4();
-    const objectKey = `${prefix}${timestamp}-${uniqueId}.png`;
+    const objectKey = `${prefix}${timestamp}-${uniqueId}.${ext}`;
 
     // Upload image buffer
     await minioClient.putObject(
@@ -199,7 +204,7 @@ async function uploadToMinIO(
       image.imageBuffer,
       image.imageBuffer.length,
       {
-        'Content-Type': 'image/png',
+        'Content-Type': mimeType,
         'x-amz-acl': 'public-read',
       }
     );
@@ -277,7 +282,7 @@ export async function uploadBufferToStorage(
       prompt: mimeType,
     },
   };
-  return uploadImageToStorage(synthetic, prefix);
+  return uploadImageToStorage(synthetic, prefix, mimeType);
 }
 
 /**
@@ -297,3 +302,43 @@ export async function deleteImageFromStorage(objectKey: string): Promise<void> {
     );
   }
 }
+
+/**
+ * Deletes all objects with a specific folder prefix from MinIO storage (folder deletion).
+ * 
+ * @param prefix - Prefix to delete (e.g. "posts/postId/")
+ */
+export async function deleteFolderFromStorage(prefix: string): Promise<void> {
+  if (storageType !== 'minio') return;
+
+  try {
+    const objectsList: string[] = [];
+    const stream = minioClient.listObjects(bucketName, prefix, true);
+    
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (obj) => {
+        if (obj.name) objectsList.push(obj.name);
+      });
+      stream.on('error', (err) => {
+        reject(err);
+      });
+      stream.on('end', () => {
+        resolve();
+      });
+    });
+
+    if (objectsList.length > 0) {
+      const deleteErrors = await minioClient.removeObjects(bucketName, objectsList);
+      
+      // Consume/drain the returned stream to ensure MinIO processes the deletion
+      for await (const err of deleteErrors) {
+        console.error(`[ObjectStorage] Error removing object:`, err);
+      }
+      
+      console.log(`[ObjectStorage] ✓ Successfully deleted ${objectsList.length} objects from MinIO with prefix: ${prefix}`);
+    }
+  } catch (error) {
+    console.error(`[ObjectStorage] ✗ Failed to delete MinIO prefix folder ${prefix}:`, error);
+  }
+}
+

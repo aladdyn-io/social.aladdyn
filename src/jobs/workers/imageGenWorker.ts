@@ -46,7 +46,7 @@ async function processImageGen(job: Job<ImageGenJobData>): Promise<string> {
 }
 
 export function startImageGenWorker(): Worker<ImageGenJobData> {
-  const concurrency = parseInt(process.env.IMAGE_CONCURRENCY || '3', 10);
+  const concurrency = parseInt(process.env.IMAGE_CONCURRENCY || '1', 10);
 
   const worker = new Worker<ImageGenJobData>(QUEUE_NAMES.IMAGE_GEN, processImageGen, {
     connection: redisConnection,

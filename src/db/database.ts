@@ -41,6 +41,7 @@ export async function getCampaignFromDB(campaignId: string): Promise<ContentInpu
     platforms: campaign.platforms,
     timezone: campaign.timezone,
     scheduledTime,
+    contentMix: campaign.contentMix,
   };
 }
 
@@ -65,16 +66,75 @@ export async function savePostsToDB(
 ): Promise<string[]> {
   console.log(`[Database] Saving ${posts.length} posts for campaign ${campaignId} (platform: ${platform})...`);
 
+  // Query campaign context for its contentMix
+  const campaign = await prisma.socialCampaign.findUnique({
+    where: { id: campaignId },
+    select: { contentMix: true }
+  });
+
+  const rawMix = (campaign?.contentMix as Record<string, number>) || { photo: 4, reel: 2, carousel: 2, story: 1, written: 2 };
+  
+  // Filter by what the target platform supports:
+  const platformCaps: Record<string, string[]> = {
+    instagram: ['photo', 'reel', 'carousel', 'story'],
+    linkedin: ['photo', 'carousel', 'written'],
+    whatsapp: ['photo', 'written']
+  };
+
+  const allowedTypes = platformCaps[platform.toLowerCase()] || ['photo'];
+  
+  // Build a pool of content types based on the campaign's contentMix
+  const rawPool: string[] = [];
+  for (const [type, weight] of Object.entries(rawMix)) {
+    if (allowedTypes.includes(type)) {
+      const count = typeof weight === 'number' ? weight : 1;
+      for (let w = 0; w < count; w++) {
+        rawPool.push(type);
+      }
+    }
+  }
+
+  // Interleave pool items to avoid sequential grouping of the same type at the beginning
+  const groups: Record<string, string[]> = {};
+  for (const type of rawPool) {
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(type);
+  }
+  
+  const pool: string[] = [];
+  const keys = Object.keys(groups);
+  let hasMore = true;
+  while (hasMore) {
+    hasMore = false;
+    for (const key of keys) {
+      if (groups[key].length > 0) {
+        pool.push(groups[key].shift()!);
+        hasMore = true;
+      }
+    }
+  }
+
+  // Fallback if pool is empty
+  if (pool.length === 0) {
+    pool.push(...allowedTypes);
+  }
+
   const results = await prisma.$transaction(
-    posts.map((post) =>
-      prisma.socialPost.create({
+    posts.map((post, idx) => {
+      // Deterministically select the content type from the pool based on the loop index
+      const resolvedContentType = post.contentType || pool[idx % pool.length] || 'photo';
+      const isVideo = ['reel', 'story'].includes(resolvedContentType.toLowerCase());
+      const resolvedMediaType = post.mediaType || (isVideo ? 'video' : 'image');
+
+      return prisma.socialPost.create({
         data: {
           campaignId,
           scheduledDate: post.scheduledDate,
           scheduledTime,
           timezone,
           platform,
-          contentType: 'photo',
+          contentType: resolvedContentType,
+          mediaType: resolvedMediaType,
           caption: post.caption,
           hashtags: post.hashtags,
           callToAction: post.callToAction,
@@ -86,10 +146,11 @@ export async function savePostsToDB(
           topic: post.metadata.topic,
           isFestival: !!post.metadata.festival,
           festivalName: post.metadata.festival ?? undefined,
+          videoPrompt: (post as any).videoPrompt ?? undefined,
           status: 'DRAFT',
         },
-      })
-    )
+      });
+    })
   );
 
   const ids = results.map((p) => p.id);
@@ -165,6 +226,10 @@ export async function updatePost(
   if (updates.approved_at !== undefined) data.approvedAt = updates.approved_at;
   if (updates.publishedAt !== undefined) data.publishedAt = updates.publishedAt;
   if (updates.published_at !== undefined) data.publishedAt = updates.published_at;
+  if (updates.scheduledDate !== undefined) data.scheduledDate = new Date(updates.scheduledDate);
+  if (updates.scheduled_date !== undefined) data.scheduledDate = new Date(updates.scheduled_date);
+  if (updates.scheduledTime !== undefined) data.scheduledTime = updates.scheduledTime;
+  if (updates.scheduled_time !== undefined) data.scheduledTime = updates.scheduled_time;
 
   if (Object.keys(data).length === 0) {
     throw new Error('No valid fields to update');
@@ -219,6 +284,9 @@ export async function saveStrategyToDB(
       campaignPhases: strategy.campaign_phases
         ? (strategy.campaign_phases as any)
         : undefined,
+      hashtagGroups: (strategy as any).hashtagGroups
+        ? ((strategy as any).hashtagGroups as any)
+        : undefined,
       modelUsed: process.env.LLM_MODEL || 'gpt-4o-mini',
     },
   });
@@ -234,7 +302,7 @@ export async function getStrategyFromDB(strategyId: string): Promise<Strategy> {
   const mix = row.contentMix as any;
 
   console.log(`[Database] ✓ Strategy found`);
-  return {
+  const strategy: Strategy = {
     strategy_id: row.id,
     content_pillars: row.contentPillars,
     tone: row.tone || 'warm and engaging',
@@ -246,6 +314,12 @@ export async function getStrategyFromDB(strategyId: string): Promise<Strategy> {
     },
     campaign_phases: row.campaignPhases as any,
   };
+
+  if (row.hashtagGroups) {
+    (strategy as any).hashtagGroups = row.hashtagGroups;
+  }
+
+  return strategy;
 }
 
 export async function getStrategyByCampaignId(campaignId: string): Promise<Strategy | null> {
@@ -253,7 +327,7 @@ export async function getStrategyByCampaignId(campaignId: string): Promise<Strat
   if (!row) return null;
 
   const mix = row.contentMix as any;
-  return {
+  const strategy: Strategy = {
     strategy_id: row.id,
     content_pillars: row.contentPillars,
     tone: row.tone || 'warm and engaging',
@@ -265,6 +339,12 @@ export async function getStrategyByCampaignId(campaignId: string): Promise<Strat
     },
     campaign_phases: row.campaignPhases as any,
   };
+
+  if (row.hashtagGroups) {
+    (strategy as any).hashtagGroups = row.hashtagGroups;
+  }
+
+  return strategy;
 }
 
 // ============================================================================

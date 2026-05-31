@@ -125,19 +125,65 @@ export async function generateCalendar(
   const topics = await generateTopicsBatch(input, strategy, topicRequests, campaignId);
 
   // ========================================================================
-  // STEP 6: COMBINE CALENDAR WITH GENERATED TOPICS
+  // STEP 6: COMBINE CALENDAR WITH GENERATED TOPICS AND SMART PLATFORMS
+  // WHY: Assign each slot to a specific platform based on prioritized strategy
   // ========================================================================
   
-  const calendar: CalendarItem[] = calendarWithoutTopics.map((entry, index) => ({
-    date: entry.date,
-    pillar: entry.pillar,
-    topic: topics[index],
-    content_type: entry.content_type as 'image',
-    is_festival: entry.is_festival,
-    festival_name: entry.festival_name,
-  }));
+  const rawPlatforms = input.platforms || [input.platform || 'instagram'];
+  const platformPattern: string[] = [];
+  const strategyWithMeta = strategy as any;
 
-  console.log(`[generateCalendar] ✓ Generated calendar with ${calendar.length} entries`);
+  if (strategyWithMeta.hashtagGroups?.platformStrategy) {
+    const ps = strategyWithMeta.hashtagGroups.platformStrategy;
+    if (Array.isArray(ps) && ps.length > 0) {
+      // Build a weighted allocation list based on priority:
+      // Priority 1 -> 5 slots
+      // Priority 2 -> 2 slots
+      // Priority 3 -> 1 slot
+      const weightedList = ps.map((p: any) => {
+        const priority = p.priority || 1;
+        let weight = 1;
+        if (priority === 1) weight = 5;
+        else if (priority === 2) weight = 2;
+        return { platform: p.platform.toLowerCase(), weight };
+      });
+
+      // Filter and only include platforms explicitly selected by the user
+      const allowed = new Set(rawPlatforms.map(p => p.toLowerCase()));
+      const filtered = weightedList.filter((item: any) => allowed.has(item.platform));
+      
+      if (filtered.length > 0) {
+        for (const item of filtered) {
+          for (let w = 0; w < item.weight; w++) {
+            platformPattern.push(item.platform);
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback to simple round-robin list if no weighted pattern could be solved
+  if (platformPattern.length === 0) {
+    platformPattern.push(...rawPlatforms.map(p => p.toLowerCase()));
+  }
+
+  console.log(`[generateCalendar] Structured weighted platform distribution pattern: ${platformPattern.join(', ')}`);
+
+  const calendar: CalendarItem[] = calendarWithoutTopics.map((entry, index) => {
+    // Select platform dynamically matching its strategic weight ratio
+    const platform = platformPattern[index % platformPattern.length];
+    return {
+      date: entry.date,
+      pillar: entry.pillar,
+      topic: topics[index],
+      content_type: entry.content_type as 'image',
+      is_festival: entry.is_festival,
+      festival_name: entry.festival_name,
+      platform,
+    };
+  });
+
+  console.log(`[generateCalendar] ✓ Generated calendar with ${calendar.length} entries distributed across platforms.`);
   return calendar;
 }
 

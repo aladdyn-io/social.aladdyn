@@ -14,9 +14,108 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
 
 2. **Open the demo**:
    ```
-   http://localhost:5500/demo.html
+   http://localhost:3000/demo.html
    ```
    Or open the file directly in a browser (ensure API is accessible)
+
+---
+
+## 🌐 Secure Tunnels & Meta Developer Portal Setup
+
+To test **Instagram Login (OAuth)** and **Publishing** locally, you must set up secure tunnels. Meta's servers require secure HTTPS URLs for OAuth redirect callbacks and publicly accessible endpoints to fetch images for posting.
+
+### 1. The Architecture
+*   **App Server (`localhost:3000`)** ── Proxy via **Cloudflare Tunnel** ── Used for Instagram/LinkedIn OAuth redirects.
+*   **MinIO Storage (`localhost:9000`)** ── Proxy via **ngrok** ── Used by Meta's servers to download your generated media assets.
+
+---
+
+### 2. Set Up Cloudflare Tunnel (for Localhost Server)
+
+Cloudflare Tunnels are free, highly stable, and do not expire. They are perfect for OAuth redirect callbacks.
+
+1. **Install Cloudflare CLI (cloudflared):**
+   *   **Windows (PowerShell):**
+       ```powershell
+       winget install Cloudflare.cloudflared
+       ```
+2. **Start a Tunnel pointing to your app:**
+   ```bash
+   cloudflared tunnel --url http://localhost:3000
+   ```
+3. **Capture the Tunnel URL:**
+   Locate the generated URL in the terminal (e.g., `https://zinc-demographic-serum-interpreted.trycloudflare.com`).
+
+---
+
+### 3. Set Up ngrok (for MinIO Media Hosting)
+
+Meta's servers need to access your locally generated images via a public endpoint.
+
+1. **Install ngrok:**
+   *   **Windows (PowerShell):**
+       ```powershell
+       winget install equinusocio.ngrok
+       ```
+2. **Start the Tunnel pointing to MinIO S3 port (`9000`):**
+   ```bash
+   ngrok http 9000
+   ```
+3. **Capture the ngrok URL:**
+   Locate your public ngrok URL (e.g., `https://state-contusion-uptake.ngrok-free.dev`).
+
+---
+
+### 4. Update Your `.env` Variables
+
+Open your `.env` file and update the following settings:
+
+```env
+# ── META OAUTH REDIRECTS ──
+# Use your Cloudflare Tunnel URL for the redirect callback
+META_REDIRECT_URI="https://<YOUR_CLOUDFLARE_SUBDOMAIN>.trycloudflare.com/api/v1/auth/meta/callback"
+
+# ── MINIO PUBLIC ASSETS ──
+# Use your public ngrok URL so Meta's servers can download images
+MINIO_PUBLIC_ENDPOINT="https://<YOUR_NGROK_ID>.ngrok-free.dev"
+```
+
+---
+
+### 5. Configure the Meta Developer Portal
+
+To allow Meta to trust your local environment tunnels:
+
+1. **Go to [Meta Developer Portal](https://developers.facebook.com/)** and select your Business/Instagram login app.
+2. **Under App Settings > Basic:**
+   *   Update **App Domains** with your Cloudflare tunnel domain (e.g., `trycloudflare.com`).
+   *   Ensure the Website **Site URL** is set to your active Cloudflare tunnel URL (`https://xxx.trycloudflare.com`).
+3. **Under Use Cases > Instagram Business Login > Settings:**
+   *   Add your exact `.env` redirect callback URL under **Valid OAuth Redirect URIs**:
+       ```
+       https://<YOUR_CLOUDFLARE_SUBDOMAIN>.trycloudflare.com/api/v1/auth/meta/callback
+       ```
+4. **Under App Settings > Advanced:**
+   *   Ensure **Share Redirect URI list** or **Strict Mode** matches your exact tunnel redirect URL.
+
+---
+
+### 6. Run and Test the Flow
+
+1. Restart the node server:
+   ```bash
+   npm run dev
+   ```
+2. Open your Cloudflare Tunnel URL in your browser:
+   ```
+   https://<YOUR_CLOUDFLARE_SUBDOMAIN>.trycloudflare.com/demo.html
+   ```
+3. Generate a campaign.
+4. Click **"Connect Instagram"** (uses the Cloudflare redirect loop seamlessly).
+5. Open your generated post and hit **Publish**! Meta will reach into your MinIO instance via the ngrok tunnel, pull the image, and publish it live!
+
+---
+
 
 ## Features
 
@@ -27,11 +126,14 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
 **What You Can Test**:
 
 - ✅ Campaign creation with custom inputs
-- ✅ View generated posts with images
+- ✅ View generated posts in grid layout
+- ✅ Toggle between Card Grid and Calendar Planner views
+- ✅ Chronological calendar slot indicators, platform tags (IG / LN), and render status indicators
+- ✅ Interactive cross-scroll scroll and card flash highlight synchronization
 - ✅ Edit post captions inline
 - ✅ Regenerate post captions (uses persisted data)
 - ✅ Regenerate posts with new images
-- ✅ Delete posts
+- ✅ Delete posts (purges database records and purges MinIO storage assets in cascade)
 - ✅ Add extra posts for specific dates
 - ✅ View real-time processing times
 - ✅ See content pillar distribution
@@ -41,16 +143,20 @@ The updated `demo.html` provides a comprehensive visual testing suite for the en
 1. Fill in industry, services, duration, geography
 2. Click "Generate Content" → Wait 30-90 seconds
 3. View posts in grid layout
-4. Each post shows:
-   - Generated image
+4. Click the **📅 Calendar Planner** tab to view your chronological monthly posting grids:
+   - View scheduled post tiles with platform-specific branding (`IG` in Pink, `LN` in Blue)
+   - View render status dots (Green for rendered images, Yellow for pending/on-demand)
+   - Click a calendar tile → switches view and scrolls smoothly to flash a high-contrast target border
+5. Each post shows:
+   - Generated image with depth compositing
    - Caption with hashtags
    - Scheduled date
    - Management buttons (Edit, Regenerate, Delete)
-5. Test all management operations
+6. Test all management operations
 
 **Key Validations**:
 
-- No duplicate topics in generated posts
+- No duplicate topics in generated posts (sequential generation)
 - Post regeneration preserves context (uses calendar_entry_id)
 - Edits persist in database
 - UI updates immediately after operations
@@ -237,28 +343,6 @@ Each post card displays:
 | Delete Post                 | ~50-150ms   | N/A                       |
 | Cache Stats                 | ~50ms       | N/A                       |
 
-### Phase Improvements
-
-**Baseline** (Before optimizations):
-
-- 30-day campaign: ~120 seconds
-
-**Phase 1** (Data consistency):
-
-- 30-day campaign: ~110 seconds
-- Improvement: 8% faster
-
-**Phase 2** (Performance optimization):
-
-- 30-day campaign: ~65 seconds
-- Improvement: 46% faster than baseline
-
-**Phase 3** (Caching):
-
-- 30-day campaign (first run): ~60 seconds
-- 30-day campaign (cached): ~50 seconds
-- Improvement: 58% faster than baseline
-
 ---
 
 ## Test Scenarios
@@ -367,6 +451,22 @@ Each post card displays:
 
 ---
 
+### Scenario 6: Liquid HTML Dynamic Layout Testing
+
+**Goal**: Verify the system generates and captures custom Tailwind overlays on-the-fly
+
+**Steps**:
+
+1. Run a campaign generation (Tab 1)
+2. Choose a generated post focusing on customer reviews, testimonials, or high-impact promotions
+3. Click the on-demand composite generation button
+4. Verify the composite image:
+   - Check if custom fonts like `Lobster` or `Pacifico` are loaded.
+   - Verify that punchy keywords are styled with custom highlight colors.
+   - Confirm star rating headers (`★★★★★`) or verified user quote bubbles are embedded dynamically.
+
+---
+
 ## Troubleshooting
 
 ### Test Failures
@@ -387,19 +487,16 @@ Each post card displays:
 
 - **Cause**: Post ID not found or database issue
 - **Fix**: Verify post exists in database
-- **Query**: `SELECT * FROM posts WHERE post_id = '...'`
 
 **"Regenerate Post Caption" Fails**
 
 - **Cause**: Missing calendar_entry_id in post record
 - **Fix**: Regenerate campaign or check database schema
-- **Note**: Should fallback to reconstruction with warning
 
 **"Cache Performance" Fails**
 
 - **Cause**: Cache endpoints not enabled
 - **Fix**: Verify cache.ts is imported in server.ts
-- **Check**: `GET /api/v1/cache/stats` returns valid response
 
 ### Performance Issues
 
@@ -408,14 +505,12 @@ Each post card displays:
 - Check OpenAI API rate limits
 - Verify network connection
 - Check server logs for errors
-- Consider reducing `total_days` or `frequency_per_week`
 
 **Low Cache Hit Rate (<20%)**
 
 - Each test run uses different campaigns
 - Cache keys include industry/geography/brand_stage
 - Normal for varied testing
-- Real usage should show 60-80% hit rate
 
 **UI Not Updating**
 
@@ -440,6 +535,7 @@ Each post card displays:
 8. **No console errors** during normal usage
 9. **Performance metrics** match expected benchmarks
 10. **Visual feedback** works (success messages, loading spinners)
+11. **Dynamic HTML overlays** render custom typographic accents beautifully
 
 ---
 
@@ -464,5 +560,3 @@ The updated `demo.html` provides:
 ✅ **Cache management** UI  
 ✅ **Performance metrics** display  
 ✅ **Comprehensive documentation**
-
-This allows complete validation of all Phase 1-3 implementations without writing separate test scripts.

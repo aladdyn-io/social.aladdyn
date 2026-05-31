@@ -12,6 +12,7 @@
  */
 
 import 'dotenv/config';
+import path from 'path';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -52,6 +53,8 @@ import cache from './services/cache';
 import { generateAiPostForDate, createManualPostForDate } from './services/calendarPost';
 import { uploadBufferToStorage } from './services/objectStorage';
 import { ManualPostData } from './types/calendar';
+import { CampaignPipelineOrchestrator } from './pipeline/orchestrator';
+import oauthRouter from './routes/oauth';
 
 // ============================================================================
 // SERVER SETUP
@@ -72,17 +75,33 @@ app.use(cors()); // Enable CORS for all origins
 app.use(express.json({ limit: '10mb' })); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
+// Serve static assets from project root (like demo.html)
+app.use(express.static(path.join(__dirname, '../')));
+
 // Request logging middleware
 app.use((req, res, next) => {
   const startTime = Date.now();
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
 
-  // Log response time
+  // Log response time only (skip logging the incoming request to reduce noise)
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    console.log(
-      `[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`
-    );
+    const statusColor = res.statusCode >= 500 ? '\x1b[31m'
+                      : res.statusCode >= 400 ? '\x1b[33m'
+                      : res.statusCode >= 300 ? '\x1b[36m'
+                      : '\x1b[32m';
+    const methodColor = req.method === 'POST' ? '\x1b[35m'
+                      : req.method === 'GET'  ? '\x1b[34m'
+                      : req.method === 'PUT'  ? '\x1b[33m'
+                      : req.method === 'DELETE' ? '\x1b[31m'
+                      : '\x1b[37m';
+    const reset = '\x1b[0m';
+    const dim = '\x1b[2m';
+    const time = new Date().toTimeString().split(' ')[0];
+    // Skip noisy polling endpoints from the log
+    const isNoise = req.path.includes('pipeline-run') || req.path.includes('favicon');
+    if (!isNoise) {
+      console.log(`${dim}${time}${reset} ${methodColor}${req.method.padEnd(6)}${reset} ${req.path} ${statusColor}${res.statusCode}${reset} ${dim}(${duration}ms)${reset}`);
+    }
   });
 
   next();
@@ -91,6 +110,16 @@ app.use((req, res, next) => {
 // ============================================================================
 // ROUTES
 // ============================================================================
+
+// ── OAuth Social Account Connection flows ─────────────────────────────────────
+// GET  /api/v1/auth/linkedin/connect    — returns LinkedIn OAuth URL
+// GET  /api/v1/auth/linkedin/callback   — exchanges code, saves SocialAccount
+// GET  /api/v1/auth/meta/connect        — returns Meta OAuth URL (Phase 3)
+// GET  /api/v1/auth/meta/callback       — exchanges code, saves IG accounts
+// GET  /api/v1/social-accounts          — list connected accounts
+// DELETE /api/v1/social-accounts/:id    — disconnect an account
+app.use('/api/v1/auth', oauthRouter);
+app.use('/api/v1', oauthRouter);
 
 /**
  * Health check endpoint
@@ -248,6 +277,10 @@ app.post(
         },
       });
       campaignId = campaign.id;
+
+      // Initialize token ledger for this campaign (3 free tokens)
+      const { initializeCampaignTokens } = await import('./services/tokenService');
+      await initializeCampaignTokens(campaignId);
 
       const output = await runContentPipeline(input, campaignId, funnelId);
 
@@ -546,6 +579,97 @@ app.post('/api/v1/test', (req: Request, res: Response) => {
 });
 
 /**
+ * Get pipeline run status
+ * GET /api/v1/campaigns/:campaignId/pipeline-run
+ */
+app.get(
+  '/api/v1/campaigns/:campaignId/pipeline-run',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    console.log(`[API] Fetching pipeline run status for campaign: ${campaignId}`);
+
+    const run = await prisma.pipelineRun.findUnique({
+      where: { campaignId },
+      include: { stages: { orderBy: { stageName: 'asc' } } },
+    });
+
+    if (!run) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No pipeline execution tracking record found for this campaign',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: run,
+    });
+  })
+);
+
+/**
+ * Apply manual stage override (invalidating all downstream stages)
+ * POST /api/v1/campaigns/:campaignId/stages/:stageName/override
+ */
+app.post(
+  '/api/v1/campaigns/:campaignId/stages/:stageName/override',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId, stageName } = req.params;
+    const { outputJson } = req.body;
+    console.log(`[API] Applying manual override to stage ${stageName} for campaign: ${campaignId}`);
+
+    const run = await prisma.pipelineRun.findUnique({ where: { campaignId } });
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active pipeline run found for this campaign',
+      });
+    }
+
+    await CampaignPipelineOrchestrator.applyOverride(run.id, stageName, outputJson);
+
+    res.json({
+      success: true,
+      message: `Manual override successfully applied to stage: ${stageName}. Downstream stages invalidated.`,
+    });
+  })
+);
+
+/**
+ * Resume pipeline execution from the first pending/failed stage
+ * POST /api/v1/campaigns/:campaignId/pipeline-run/resume
+ */
+app.post(
+  '/api/v1/campaigns/:campaignId/pipeline-run/resume',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    console.log(`[API] Triggering resumption of campaign pipeline run: ${campaignId}`);
+
+    const run = await prisma.pipelineRun.findUnique({ where: { campaignId } });
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active pipeline run found for this campaign',
+      });
+    }
+
+    // Trigger async execution background task
+    CampaignPipelineOrchestrator.executeRun(run.id).catch((err) => {
+      console.error(`[API] Async pipeline resume failure:`, err);
+    });
+
+    res.json({
+      success: true,
+      message: 'Campaign pipeline execution resumed in the background.',
+    });
+  })
+);
+
+/**
  * Get all posts for a campaign
  * GET /api/v1/campaigns/:campaignId/posts
  *
@@ -664,17 +788,29 @@ app.post(
       regenerateCaption = true,
       regeneratePrompt = false,
       regenerateImage = false,
+      feedback,
+      userFeedback,
+      prompt: reqPrompt,
+      templateStyle,
     } = req.body;
 
+    const actualFeedback = feedback || userFeedback || reqPrompt;
+
     console.log(
-      `[API] Regenerating post: ${postId} (caption:${regenerateCaption} prompt:${regeneratePrompt} image:${regenerateImage})`
+      `[API] Regenerating post: ${postId} (caption:${regenerateCaption} prompt:${regeneratePrompt} image:${regenerateImage} feedback:${actualFeedback ? actualFeedback.substring(0, 30) + '...' : 'none'} templateStyle:${templateStyle || 'none'})`
     );
+
+    // Fetch post (no token debit — image regeneration is free; only new manual posts consume tokens)
+    const post = await prisma.socialPost.findUnique({ where: { id: postId }, select: { campaignId: true } });
+    if (!post) throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Post not found: ${postId}`, 404, { postId });
 
     try {
       const regeneratedPost = await regeneratePost(postId, {
         regenerateCaption,
         regeneratePrompt,
         regenerateImage,
+        feedback: actualFeedback,
+        templateStyle,
       });
 
       const response: ApiResponse = {
@@ -756,16 +892,40 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const disableHtml = req.query.disableHtml === 'true' || req.body.disableHtml === true;
+    const templateStyle = req.query.templateStyle || req.body.templateStyle;
+    let resolvedStyle: 'glass' | 'bold' | 'elegant' | undefined = undefined;
+    let layoutTypeOverride: 'classic' | 'feature_list' | 'editorial_column' | 'split_screen' | undefined = undefined;
+
+    if (templateStyle) {
+      const styleStr = String(templateStyle).toLowerCase().trim();
+      if (['glass', 'bold', 'elegant'].includes(styleStr)) {
+        resolvedStyle = styleStr as 'glass' | 'bold' | 'elegant';
+      } else if (['editorial', 'editorial_column', 'review'].includes(styleStr)) {
+        resolvedStyle = 'elegant';
+        layoutTypeOverride = 'editorial_column';
+      } else if (['features', 'feature_list', 'list', 'checklist'].includes(styleStr)) {
+        resolvedStyle = 'glass';
+        layoutTypeOverride = 'feature_list';
+      } else if (['comparison', 'split', 'split_screen', 'vs'].includes(styleStr)) {
+        resolvedStyle = 'bold';
+        layoutTypeOverride = 'split_screen';
+      }
+    }
+
     const startTime = Date.now();
 
-    console.log(`[API] Generating image on-demand for post: ${postId}`);
+    console.log(`[API] Generating image on-demand for post: ${postId} (disableHtml: ${disableHtml}, templateStyle: ${resolvedStyle}, layoutTypeOverride: ${layoutTypeOverride})`);
 
     try {
+      const post = await prisma.socialPost.findUnique({ where: { id: postId }, select: { campaignId: true } });
+      if (!post) throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Post not found: ${postId}`, 404, { postId });
+
       // Import on-demand service
       const { generatePostImage } = await import('./services/onDemandImageGeneration');
 
-      // Generate image using detailed prompt from database
-      const imageUrl = await generatePostImage(postId);
+      // Generate image using detailed prompt from database (force=true for manual endpoint)
+      const imageUrl = await generatePostImage(postId, disableHtml, true, resolvedStyle, layoutTypeOverride);
 
       const duration = Date.now() - startTime;
 
@@ -855,6 +1015,199 @@ app.post(
         500,
         { postIds }
       );
+    }
+  })
+);
+
+/**
+ * Generate video for a specific post (ON-DEMAND)
+ * POST /api/v1/posts/:postId/generate-video
+ *
+ * Routes automatically:
+ *   - reel / story  → KlingVideoGenerator (with image fallback)
+ *   - all others    → existing generatePostImage path
+ *
+ * Returns: { postId, videoUrl, message, generatedAt }
+ */
+app.post(
+  '/api/v1/posts/:postId/generate-video',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postId } = req.params;
+    const startTime = Date.now();
+
+    console.log(`[API] Generating video on-demand for post: ${postId}`);
+
+    // Fetch contentType to decide routing
+    const post = await prisma.socialPost
+      .findUnique({ where: { id: postId }, select: { contentType: true, campaignId: true, imageGenerated: true } })
+      .catch(() => null);
+
+    if (!post) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Post not found: ${postId}`, 404, { postId });
+    }
+
+    try {
+      const { isVideoContentType, generatePostVideo } = await import('./services/onDemandVideoGeneration');
+      const { generatePostImage } = await import('./services/onDemandImageGeneration');
+
+      // Generate video using detailed prompt from database
+      const mediaUrl = isVideoContentType(post.contentType)
+        ? await generatePostVideo(postId, true)
+        : await generatePostImage(postId, false, true);
+
+      const duration = Date.now() - startTime;
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          postId,
+          videoUrl: mediaUrl,
+          message: 'Media generated successfully',
+          generatedAt: new Date().toISOString(),
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          processingTime: duration,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      throw new AppError(
+        ApiErrorCode.PIPELINE_FAILED,
+        `Failed to generate video: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        500,
+        { postId }
+      );
+    }
+  })
+);
+
+/**
+ * Batch generate videos for multiple posts
+ * POST /api/v1/posts/generate-videos/batch
+ *
+ * Request body: { postIds: string[] }
+ * Returns: { results: { postId, success, videoUrl?, error? }[] }
+ */
+app.post(
+  '/api/v1/posts/generate-videos/batch',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postIds } = req.body;
+    const startTime = Date.now();
+
+    if (!Array.isArray(postIds) || postIds.length === 0) {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        'Request body must include "postIds" array with at least one post ID',
+        400
+      );
+    }
+
+    console.log(`[API] Batch generating videos for ${postIds.length} posts`);
+
+    try {
+      const { generatePostVideos } = await import('./services/onDemandVideoGeneration');
+
+      const resultsMap = await generatePostVideos(postIds);
+
+      const results = Array.from(resultsMap.entries()).map(([postId, result]) => ({
+        postId,
+        ...result,
+      }));
+
+      const successCount = results.filter(r => r.success).length;
+      const duration = Date.now() - startTime;
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          totalRequested: postIds.length,
+          successCount,
+          failureCount: postIds.length - successCount,
+          results,
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          processingTime: duration,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      throw new AppError(
+        ApiErrorCode.PIPELINE_FAILED,
+        `Failed to batch generate videos: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        500,
+        { postIds }
+      );
+    }
+  })
+);
+
+/**
+ * Get token balance and transaction history for a campaign
+ * GET /api/v1/campaigns/:campaignId/tokens
+ */
+app.get(
+  '/api/v1/campaigns/:campaignId/tokens',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+
+    const campaign = await prisma.socialCampaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+    if (!campaign) {
+      return res.json({
+        success: true,
+        data: { balance: 0, transactions: [] },
+        message: 'Campaign not found'
+      });
+    }
+
+    const { getCampaignTokenBalance } = await import('./services/tokenService');
+    const tokenData = await getCampaignTokenBalance(campaignId);
+
+    res.json({ success: true, data: tokenData, meta: { timestamp: new Date().toISOString() } });
+  })
+);
+
+/**
+ * Grant tokens to a campaign (admin only)
+ * POST /api/v1/campaigns/:campaignId/tokens/grant
+ */
+app.post(
+  '/api/v1/campaigns/:campaignId/tokens/grant',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+    const { amount } = req.body;
+
+    // Admin check
+    const user = (req as any).user;
+    if (user?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin access required' } });
+    }
+
+    if (!amount || typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+      throw new AppError(ApiErrorCode.INVALID_INPUT, 'amount must be a positive integer', 400);
+    }
+
+    const campaign = await prisma.socialCampaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Campaign not found: ${campaignId}`, 404, { campaignId });
+    }
+
+    const { grantTokens, TokenCapExceededError } = await import('./services/tokenService');
+    try {
+      const newBalance = await grantTokens(campaignId, amount);
+      res.json({ success: true, data: { campaignId, newBalance, granted: amount }, meta: { timestamp: new Date().toISOString() } });
+    } catch (err: any) {
+      if (err.name === 'TokenCapExceededError') {
+        return res.status(422).json({ success: false, error: { code: 'TOKEN_CAP_EXCEEDED', message: err.message, maxGrantable: err.maxGrantable } });
+      }
+      throw err;
     }
   })
 );
@@ -992,6 +1345,21 @@ app.delete(
       throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
     }
 
+    // 1. Fetch all posts associated with this campaign to delete their MinIO objects
+    try {
+      const posts = await prisma.socialPost.findMany({
+        where: { campaignId },
+        select: { id: true }
+      });
+
+      const { deleteFolderFromStorage } = await import('./services/objectStorage');
+      for (const post of posts) {
+        await deleteFolderFromStorage(`posts/${post.id}/`);
+      }
+    } catch (err: any) {
+      console.error(`[API] ⚠ MinIO deletion failed during campaign delete: ${err.message}`);
+    }
+
     // Cascade delete — Prisma handles posts + strategy via onDelete: Cascade
     await prisma.socialCampaign.delete({ where: { id: campaignId } });
 
@@ -1015,17 +1383,43 @@ app.post(
 
     const existing = await prisma.socialPost.findUnique({
       where: { id: postId },
-      select: { status: true },
     });
 
     if (!existing) {
       throw new AppError(ApiErrorCode.INVALID_INPUT, 'Post not found', 404);
     }
 
-    if (existing.status !== 'DRAFT') {
+    // Gracefully handle posts that are already approved, scheduled, publishing, or posted.
+    // Returning success prevents race-condition client alerts and allows the UI to refresh.
+    if (existing.status === 'APPROVED' || existing.status === 'SCHEDULED') {
+      return res.json({
+        success: true,
+        data: { post: existing, message: 'Post is already approved and scheduled.' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+
+    if (existing.status === 'PUBLISHING') {
+      return res.json({
+        success: true,
+        data: { post: existing, message: 'Post is already in the process of being published.' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+
+    if (existing.status === 'POSTED') {
+      return res.json({
+        success: true,
+        data: { post: existing, message: 'Post has already been successfully published.' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+
+    // Only DRAFT and FAILED posts can transition to APPROVED
+    if (existing.status !== 'DRAFT' && existing.status !== 'FAILED') {
       throw new AppError(
         ApiErrorCode.INVALID_INPUT,
-        `Cannot approve post in '${existing.status}' status — only DRAFT posts can be approved`,
+        `Cannot approve post in '${existing.status}' status — only DRAFT and FAILED posts can be approved`,
         400
       );
     }
@@ -1038,6 +1432,76 @@ app.post(
     res.json({
       success: true,
       data: { post, message: 'Post approved — will be published at scheduled time' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  })
+);
+
+/**
+ * Publish a post immediately (bypassing the scheduled time delay)
+ * POST /api/v1/posts/:postId/publish
+ */
+app.post(
+  '/api/v1/posts/:postId/publish',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { postId } = req.params;
+
+    const post = await prisma.socialPost.findUnique({
+      where: { id: postId },
+      select: { id: true, campaignId: true, platform: true, status: true },
+    });
+
+    if (!post) {
+      throw new AppError(ApiErrorCode.INVALID_INPUT, 'Post not found', 404);
+    }
+
+    if (post.status === 'PUBLISHING') {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        'Cannot publish post — it is currently in the process of publishing.',
+        400
+      );
+    }
+
+    if (post.status === 'POSTED') {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        'Cannot publish post — it has already been successfully published!',
+        400
+      );
+    }
+
+    // Approve the post if it was in DRAFT or FAILED
+    const updatedPost = await prisma.socialPost.update({
+      where: { id: postId },
+      data: { status: 'APPROVED', approvedAt: new Date() },
+    });
+
+    // Enqueue immediately with NO delay to the BullMQ publish queue
+    const { publishQueue: queue } = await import('./jobs/queues');
+    
+    // Remove any previous job for this post if active
+    await queue.remove(`publish-${postId}`).catch(() => {});
+
+    await queue.add(
+      `publish-${postId}`,
+      {
+        postId,
+        campaignId: post.campaignId,
+        platform: post.platform,
+      },
+      {
+        jobId: `publish-${postId}`,
+      }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        post: updatedPost,
+        message: 'Post successfully enqueued for immediate live publishing!',
+      },
       meta: { timestamp: new Date().toISOString() },
     });
   })
@@ -1127,7 +1591,17 @@ app.post(
       };
 
       res.json(response);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'InsufficientTokensError') {
+        return res.status(402).json({
+          success: false,
+          error: {
+            code: 'INSUFFICIENT_TOKENS',
+            message: 'Insufficient regeneration tokens to generate image for new post',
+            balance: error.balance,
+          },
+        });
+      }
       throw new AppError(
         ApiErrorCode.PIPELINE_FAILED,
         `Failed to add post: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -1276,18 +1750,32 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId, date } = req.params;
-    const { pillar, topic } = req.body ?? {};
+    const { pillar, topic, platform, contentType, scheduledTime } = req.body ?? {};
 
-    const post = await generateAiPostForDate(campaignId, date, { pillar, topic });
+    try {
+      const post = await generateAiPostForDate(campaignId, date, { pillar, topic, platform, contentType, scheduledTime });
 
-    res.status(201).json({
-      success: true,
-      data: {
-        post,
-        message: 'AI post created — use generate-image to add media',
-      },
-      meta: { timestamp: new Date().toISOString() },
-    });
+      res.status(201).json({
+        success: true,
+        data: {
+          post,
+          message: 'AI post created — use generate-image to add media',
+        },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (error: any) {
+      if (error.name === 'InsufficientTokensError') {
+        return res.status(402).json({
+          success: false,
+          error: {
+            code: 'INSUFFICIENT_TOKENS',
+            message: 'Insufficient regeneration tokens to generate new manual AI post',
+            balance: error.balance,
+          },
+        });
+      }
+      throw error;
+    }
   })
 );
 
@@ -1348,13 +1836,27 @@ app.post(
       imageUrl,
     };
 
-    const post = await createManualPostForDate(campaignId, date, data);
+    try {
+      const post = await createManualPostForDate(campaignId, date, data);
 
-    res.status(201).json({
-      success: true,
-      data: { post, message: 'Manual post created as DRAFT' },
-      meta: { timestamp: new Date().toISOString() },
-    });
+      res.status(201).json({
+        success: true,
+        data: { post, message: 'Manual post created as DRAFT' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (error: any) {
+      if (error.name === 'InsufficientTokensError') {
+        return res.status(402).json({
+          success: false,
+          error: {
+            code: 'INSUFFICIENT_TOKENS',
+            message: 'Insufficient regeneration tokens to create new manual post',
+            balance: error.balance,
+          },
+        });
+      }
+      throw error;
+    }
   })
 );
 
@@ -1490,7 +1992,16 @@ function startServer() {
     console.log(`  POST   http://localhost:${PORT}/api/v1/posts/:id/regenerate`);
     console.log(`  DELETE http://localhost:${PORT}/api/v1/posts/:id`);
     console.log(`  POST   http://localhost:${PORT}/api/v1/test`);
+    console.log('');
+    console.log('OAuth / Social Account endpoints:');
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/linkedin/connect`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/linkedin/callback`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/meta/connect  (Phase 3)`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/auth/meta/callback  (Phase 3)`);
+    console.log(`  GET    http://localhost:${PORT}/api/v1/social-accounts`);
+    console.log(`  DELETE http://localhost:${PORT}/api/v1/social-accounts/:id`);
     console.log('='.repeat(80));
+
 
     // ── BullMQ workers + scheduler ─────────────────────────────────────────
     // Only start if Redis is reachable; failure is non-fatal in dev
@@ -1536,4 +2047,4 @@ if (require.main === module) {
   startServer();
 }
 
-export { app, startServer };
+export { app, startServer }; // Trigger restart
