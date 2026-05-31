@@ -25,6 +25,47 @@ import { createLogger } from '../utils/logger';
 import { inferAudienceType } from './audienceClassifier';
 
 const logger = createLogger({ service: 'strategy-agent-sequence' });
+const isOpenAiDisabled =
+  process.env.OPENAI_DISABLED === 'true' ||
+  process.env.AI_DISABLED === 'true' ||
+  !process.env.OPENAI_API_KEY;
+
+const buildFallbackStrategy = (input: NormalizedInput): Strategy => {
+  const pillars = [
+    `${input.industry} insights`,
+    'Customer stories',
+    'Tips and how-to',
+    'Offers and promotions',
+  ];
+
+  const totalDays = input.total_days || 7;
+  const needsPhases = totalDays >= 14;
+  const midpoint = Math.max(1, Math.floor(totalDays / 2));
+
+  return {
+    content_pillars: pillars.slice(0, 4),
+    tone: 'professional, warm, and helpful',
+    cta_style: 'Learn more about our services and how we can help',
+    content_mix: { education: 50, trust: 30, promotion: 20 },
+    campaign_phases: needsPhases
+      ? [
+          {
+            dayRange: [1, midpoint],
+            focus: 'awareness',
+            contentMixOverride: { education: 60, trust: 30, promotion: 10 },
+            guidance: 'Introduce the brand, highlight expertise, and build familiarity.',
+          },
+          {
+            dayRange: [midpoint + 1, totalDays],
+            focus: 'conversion',
+            contentMixOverride: { education: 30, trust: 40, promotion: 30 },
+            guidance: 'Show proof, invite inquiries, and highlight offers.',
+          },
+        ]
+      : undefined,
+  };
+};
+const logger = createLogger({ service: 'strategy-agent-sequence' });
 
 /**
  * Legacy Sequential Wrapper
@@ -41,6 +82,13 @@ export async function generateStrategy(
   if (cached) {
     logger.info(`[Strategy] Cache hit for campaign: ${input.industry}/${input.geography}`);
     return cached;
+  }
+
+  if (isOpenAiDisabled) {
+    const fallback = buildFallbackStrategy(input);
+    cache.set(cacheKey, fallback, CacheTTL.STRATEGY);
+    logger.warn('[Strategy] OpenAI disabled — using fallback strategy');
+    return fallback;
   }
 
   logger.info(`Starting legacy single-pass strategy pipeline for industry: ${input.industry}`);

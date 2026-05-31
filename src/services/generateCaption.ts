@@ -8,6 +8,44 @@
 import { CalendarItem, Strategy } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { callLlm } from '../utils/llmClient';
+const isOpenAiDisabled =
+  process.env.OPENAI_DISABLED === 'true' ||
+  process.env.AI_DISABLED === 'true' ||
+  !process.env.OPENAI_API_KEY;
+
+const isQuotaError = (error: unknown): boolean => {
+  const err = error as {
+    code?: string;
+    status?: number;
+    message?: string;
+    error?: { code?: string };
+  };
+
+  return (
+    err?.code === 'insufficient_quota' ||
+    err?.error?.code === 'insufficient_quota' ||
+    (err?.status === 429 &&
+      typeof err?.message === 'string' &&
+      err.message.includes('insufficient_quota'))
+  );
+};
+
+const buildFallbackCaption = (
+  calendarItem: CalendarItem,
+  strategy: Strategy,
+  normalized: NormalizedInput
+): string => {
+  const topicLine = calendarItem.is_festival
+    ? `Celebrating ${calendarItem.festival_name}: ${calendarItem.topic}.`
+    : `${calendarItem.topic}.`;
+
+  const valueLine = `Serving ${normalized.geography} with ${normalized.services.join(', ')}.`;
+  const ctaLine = strategy.cta_style || 'Learn more about our services.';
+
+  return `${topicLine}
+${valueLine}
+${ctaLine}`.trim();
+};
 
 export async function generateCaption(
   calendarItem: CalendarItem,
@@ -16,8 +54,28 @@ export async function generateCaption(
   websiteContext?: string,
   feedback?: string
 ): Promise<string> {
-  const raw = await callOpenAI(calendarItem, strategy, normalized, websiteContext, feedback);
-  return validateCaption(raw);
+  if (isOpenAiDisabled) {
+    return validateCaption(buildFallbackCaption(calendarItem, strategy, normalized));
+  }
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const raw = await callOpenAI(calendarItem, strategy, normalized, websiteContext, feedback);
+      return validateCaption(raw);
+    } catch (error: any) {
+      if (isQuotaError(error)) {
+        return validateCaption(buildFallbackCaption(calendarItem, strategy, normalized));
+      }
+      if (error?.status === 429 || error?.code === 'rate_limit_exceeded') {
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.warn(`[Caption] Rate limit, backoff ${delay}ms (attempt ${attempt}/3)`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      if (attempt === 3) throw error;
+    }
+  }
+  throw new Error('Caption generation failed');
 }
 
 async function callOpenAI(
