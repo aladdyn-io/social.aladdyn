@@ -160,22 +160,19 @@ graph TD
   * Replaced static text card timestamps with **interactive, live inline Date & Time inputs** that auto-save mutations back to the Postgres database via `PUT /api/v1/posts/:postId` on `blur` or `change`.
   * Integrated a **`✅ Approve Post`** action flow. Newly generated posts are created in a `DRAFT` state. Clicking `Approve Post` transitions the status to `APPROVED`, scheduling it. Once approved, the card dynamically locks to a sleek blue `✓ Approved & Scheduled` state.
 
-### 5. Premium Visual Overhaul: 3D Depth Watermarks & Layout Staging Protection (Fully Implemented)
-* **The Issue**: Multiple visual visual constraints and alignment glitches were discovered during early asset reviews:
-  * Standard/fallback slide templates rendered all elements in the primary headline color, washing out visual hierarchy.
-  * Checklist rows staggered and shifted horizontally depending on card alignment (left/center/right), creating scattered checkmarks.
-  * In product staging scenes, overlays collided with floor pedestals and products because flat floors mapped to very low occupancy variance.
-  * The 3D depth sandwich effect was rarely activated since the safety guard pushed text in front of the cutout subject to prevent slicing/readability errors.
-* **The Resolution**: Executed a complete premium styling polish across [htmlRenderer.ts](file:///C:/Users/shriy/OneDrive/Desktop/Projects/Aladdyn/social%20aladdyn/src/services/htmlRenderer.ts), [saliencyAnalyzer.ts](file:///C:/Users/shriy/OneDrive/Desktop/Projects/Aladdyn/social%20aladdyn/src/services/saliencyAnalyzer.ts), and [layoutDirector.ts](file:///C:/Users/shriy/OneDrive/Desktop/Projects/Aladdyn/social%20aladdyn/src/services/layoutDirector.ts):
-  * **Gigantic 3D Sandwich Watermark**: Split the structural background elements from readable typography overlays. Created a stroke-outlined gigantic display watermark word (e.g. `"GLOW"`, `"SERUM"`) at `Z-10` behind the `Z-20` product cutout layer (which casts realistic shadows onto it), while keeping readable copy safely on `Z-30`.
-  * **Color Contrast Hierarchy**: Mapped all fallback slide subtitles, feature card details, and standard checklist items to the softer `finalSubtitleColor`.
-  * **Pristine Vertical Column Checklists**: Overhauled row components so that all checkmark badges align in a perfect, straight, vertical line by locking their layout to `align-items: flex-start; text-align: left;` while letting the card float cleanly.
-  * **Spatial Pedestal Protection**: Added a bottom quadrant bias penalty (`+0.35`) in the saliency occupancy solvers to mathematically guide the computer vision layout solver to place text overlays in the upper wall negative spaces, leaving products fully clean and visible!
-  * **Ultra-Premium Luxury Typography, Badges & CTA Upgrades (Fully Implemented)**:
-    * **Cursive Typography Highlights**: Integrated a flowing, elegant cursive/handwriting Google Fonts system (`Caveat` and `Pacifico`) allowing the LLM Layout Director to wrap emotional core keywords inside headlines/subtitles in dual-tone script spans: `<span class="font-script text-accent-color">Community!</span>` or `<span class="font-script text-accent-color">Efficacy</span>`.
-    * **Luxury Checklist Badge Upgrades**: Refactored the `renderIconBadge` service and layout director blueprints to support two custom premium modes: `"solid"` accent-colored circles with white outline icons, and `"double_ring"` concentric outlined circles with thin stroke outline icons.
-    * **High-End Pill CTA Buttons**: Engineered CTA button templates to support premium pill shapes (`rounded-full`) containing a white leading circular indicator housing a brand-colored right action arrow (`→`).
-    * **TypeScript & Schema Synchronization**: Synchronized these premium choices (`badgeStyle`, `ctaIconStyle`, `useScriptHighlight`) across Type contracts, the Headless Compositor engines, and the LLM Layout Director prompts.
+### 5. Restored Testimonial Cards & Contrast-Safe Footers (Fully Implemented)
+* **The Issue**: Testimonial posts were missing customer quotes and 5 stars because of a copy generator conflict. The bottom trust footer washed out because standard brand base colors defaulted to white or transparent, rendering white-on-white text and icons invisible.
+* **The Resolution**:
+  * **Intent Deconfliction**: Segregated copy richness guidelines by intent in `copyDirector.ts`. Testimonial posts are now strictly prevented from generating checklist features, freeing up space to output exactly one review `quote`, a customer URN name, and `★★★★★` stars.
+  * **Testimonial Bubble Card**: Upgraded the default template and the Layout Director's `dynamicHtmlBlock` to automatically compile a gorgeous floating speech-bubble style review card (`.bubble-speech` class) containing gold stars, customer name, and italic quote text.
+  * **Bulletproof Charcoal Footer**: Restructured the persistent footer bar to a high-contrast charcoal slate background (`rgba(15, 23, 42, 0.96)`) and dynamically injected the active button background color (`btnBg`) into the text and phone icons, guaranteeing absolute visual contrast.
+
+### 6. Sofa-Prohibiting Spatial Splits, 3D Sandwich Bypass & Brand Accent Colors (Fully Implemented)
+* **The Issue**: Latent models (like Flux) suffer from a strong centering bias, often stretching wide furniture (like multi-seater sofas) across the canvas, which places human subjects directly behind left-aligned text cards. Furthermore, glitched foreground cutouts (such as floating flowers) overlapped text because of the 3D sandwich layer. Finally, the compositor's micro-contrast tuner was overriding all brand accent colors to hardcoded Tailwind purple (`#4F46E5`).
+* **The Resolution**:
+  * **No Wide Furniture Rule**: Added an aggressive prompt safeguard in `generateImagePrompt.ts` that explicitly forbids wide furniture like sofas, couches, beds, or dining tables for split layouts. The engine now only requests compact single-seat armchairs, chairs, or stools locked to the outer 40% margin of the active side with no central bleed.
+  * **3D Depth Sandwich Bypass**: Completely disabled the ONNX-powered transparent subject cutout extractor (`extractSubjectMask`) for both standard posts and carousels to prevent floating visual artifacts. Locked `typographyZIndex` to `'in_front'` globally, guaranteeing that Playwright renders all overlays cleanly at Z-Index 30.
+  * **Dynamic Accent Colors**: Upgraded the micro-contrast tuner in `layoutDirector.ts` and step 5 of `onDemandImageGeneration.ts` to propagate the layout's custom `accentColorOverride` or the campaign's base branding `accentColor` into the CSS root variables block, completely restoring brand color compliance and eliminating hardcoded purple accents.
 
 ---
 
@@ -273,6 +270,6 @@ Ensure the following TypeScript check passes cleanly before attempting deploymen
 ```bash
 npx tsc --noEmit
 ```
-All system files compiled cleanly as of **May 25, 2026**.
+All system files compiled cleanly as of **June 1, 2026**.
 
 *Handbook Compiled by Antigravity AI, Google DeepMind.*

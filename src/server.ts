@@ -1954,6 +1954,107 @@ app.get(
 );
 
 // ============================================================================
+// AI CAMPAIGN SUMMARY
+// ============================================================================
+
+/**
+ * Generate a natural-language AI summary for a campaign
+ * POST /api/v1/campaigns/:campaignId/summary
+ *
+ * Returns a 2-3 sentence human-readable brief synthesising the campaign
+ * strategy, audience, goal, and current execution status.
+ * Result is cached for 10 minutes to avoid redundant LLM calls.
+ */
+app.post(
+  '/api/v1/campaigns/:campaignId/summary',
+  requireAuth,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId } = req.params;
+
+    const cacheKey = `campaign-summary:${campaignId}`;
+    const force = req.body?.force === true;
+
+    if (force) {
+      cache.invalidate(cacheKey);
+    }
+
+    const cached = cache.get<string>(cacheKey);
+    if (cached) {
+      return res.json({ success: true, data: { summary: cached }, meta: { cached: true } });
+    }
+
+    // Fetch campaign + strategy + post counts
+    const campaign = await prisma.socialCampaign.findUnique({
+      where: { id: campaignId },
+      include: { strategy: true, _count: { select: { posts: true } } },
+    });
+
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
+
+    const postStats = await prisma.socialPost.groupBy({
+      by: ['status'],
+      where: { campaignId },
+      _count: { status: true },
+    });
+
+    const statMap: Record<string, number> = {};
+    postStats.forEach((s: any) => { statMap[s.status] = s._count.status; });
+
+    const total = campaign._count.posts;
+    const posted = statMap['POSTED'] || 0;
+    const drafts = statMap['DRAFT'] || 0;
+    const scheduled = (statMap['SCHEDULED'] || 0) + (statMap['APPROVED'] || 0);
+    const failed = statMap['FAILED'] || 0;
+
+    const pillars = (campaign.strategy?.contentPillars || []).join(', ') || 'not set';
+    const mix = campaign.strategy?.contentMix
+      ? Object.entries(campaign.strategy.contentMix as Record<string, number>)
+          .map(([k, v]) => `${k} ${v}%`).join(', ')
+      : 'balanced';
+
+    const daysLeft = campaign.endDate
+      ? Math.max(0, Math.ceil((new Date(campaign.endDate).getTime() - Date.now()) / 86400000))
+      : null;
+
+    const prompt = `You are a social media campaign analyst. Write a concise 2-3 sentence executive summary for this campaign. Be specific, insightful, and actionable. Sound like a smart marketing strategist, not a robot. Do NOT use bullet points or headers — plain flowing prose only.
+
+Campaign: ${campaign.name || campaign.industry}
+Industry: ${campaign.industry || 'General'}
+Geography: ${campaign.geography || 'India'}
+Goal: ${campaign.goal}
+Platforms: ${(campaign.platforms || []).join(', ')}
+Brand tone: ${campaign.strategy?.tone || 'professional'}
+Content pillars: ${pillars}
+Content mix: ${mix}
+Duration: ${campaign.totalDays} days${daysLeft !== null ? `, ${daysLeft} days remaining` : ''}
+Frequency: ${campaign.frequencyPerWeek}x per week
+Post status: ${total} total — ${posted} published, ${scheduled} scheduled, ${drafts} drafts, ${failed} failed
+
+Write the summary now:`;
+
+    const { callLlm } = await import('./utils/llmClient');
+    const completion = await callLlm({
+      model: process.env.LLM_MODEL || 'llama-3.1-8b-instant',
+      messages: [
+        { role: 'system', content: 'You are a concise marketing strategist. Write plain prose summaries only. No bullet points, no headers, no markdown.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 180,
+    });
+
+    const summary = completion.choices[0]?.message?.content?.trim() || 'Summary unavailable.';
+
+    // Cache for 10 minutes
+    cache.set(cacheKey, summary, 10 * 60 * 1000);
+
+    res.json({ success: true, data: { summary }, meta: { cached: false } });
+  })
+);
+
+// ============================================================================
 // ERROR HANDLING
 // ============================================================================
 

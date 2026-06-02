@@ -167,238 +167,142 @@ export async function generateLayoutBlueprint(params: {
   * For Quadrant-based cards / floating layouts (standard classic, feature_list, split_screen):
     - Headline Region: ${detailedRegions.quadrantHeadline.averageColorName} (Hex: ${detailedRegions.quadrantHeadline.averageColorHex}, isDarkBg: ${detailedRegions.quadrantHeadline.isDarkBg})
     - Subtitle/Body Region: ${detailedRegions.quadrantSubtitle.averageColorName} (Hex: ${detailedRegions.quadrantSubtitle.averageColorHex}, isDarkBg: ${detailedRegions.quadrantSubtitle.isDarkBg})
-    - Features List Region: ${detailedRegions.quadrantFeatures.averageColorName} (Hex: ${detailedRegions.quadrantFeatures.averageColorHex}, isDarkBg: ${detailedRegions.quadrantFeatures.isDarkBg})
-    - CTA Button Region: ${detailedRegions.quadrantCta.averageColorName} (Hex: ${detailedRegions.quadrantCta.averageColorHex}, isDarkBg: ${detailedRegions.quadrantCta.isDarkBg})
-  * For Column-based panels (editorial_column, editorial_left_bleed):
-    - Headline Region: ${detailedRegions.columnHeadline.averageColorName} (Hex: ${detailedRegions.columnHeadline.averageColorHex}, isDarkBg: ${detailedRegions.columnHeadline.isDarkBg})
-    - Subtitle/Body Region: ${detailedRegions.columnSubtitle.averageColorName} (Hex: ${detailedRegions.columnSubtitle.averageColorHex}, isDarkBg: ${detailedRegions.columnSubtitle.isDarkBg})
-    - Features List Region: ${detailedRegions.columnFeatures.averageColorName} (Hex: ${detailedRegions.columnFeatures.averageColorHex}, isDarkBg: ${detailedRegions.columnFeatures.isDarkBg})
-    - CTA Button Region: ${detailedRegions.columnCta.averageColorName} (Hex: ${detailedRegions.columnCta.averageColorHex}, isDarkBg: ${detailedRegions.columnCta.isDarkBg})
+  * For Quadrant-based cards:
+    - Headline Region: ${detailedRegions.quadrantHeadline.averageColorName} (${detailedRegions.quadrantHeadline.averageColorHex})
+    - Subtitle Region: ${detailedRegions.quadrantSubtitle.averageColorName} (${detailedRegions.quadrantSubtitle.averageColorHex})
+  * For Column-based panels:
+    - Headline Region: ${detailedRegions.columnHeadline.averageColorName} (${detailedRegions.columnHeadline.averageColorHex})
+    - Subtitle Region: ${detailedRegions.columnSubtitle.averageColorName} (${detailedRegions.columnSubtitle.averageColorHex})
 `;
   }
 
   const prompt = `You are a world-class Visual Design Director at a luxury ad agency. A highly sophisticated background image asset has been generated and pre-composed for a premium D2C brand or high-performance B2B enterprise campaign. 
 
-YOUR SOLE MISSION IS TO ELEVATE THIS PREMIUM BACKGROUND ASSET INTO A STUNNING, MULTI-DIMENSIONAL AD MASTERPIECE. 
+YOUR SOLE MISSION IS TO ELEVATE THIS PREMIUM BACKGROUND ASSET INTO A STUNNING, MULTI-DIMENSIONAL AD MASTERPIECE by matching it to one of our 5 High-Fidelity Contextual Archetypes!
 
 HOLISTIC VISUALIZATION (THINK LIKE A FINAL COMPOSITOR):
-Do NOT just output random HTML text blocks blindly! Visualize the FINAL generated image. Consider what the computer vision engine has handed you (the empty grid spaces) and what the copywriter has handed you. How will these elements physically overlay on a 1080px canvas? Does the layout look disconnected? Does it obscure the product? Imagine the final rendered PNG in your mind's eye. Every absolute position and margin must serve the *final holistic visual balance* of the ad.
+Do NOT just output random HTML text blocks blindly! Visualize the FINAL generated image. Imagine how elements physically overlay on a 1080px canvas. Every absolute position, margin, padding, and alignment must serve the final visual balance of the ad. Treat typography as structural art. Use breathing room, elegant high-fashion typography rules, purposeful asymmetry, and luxury spacing.
 
-Do not act like a basic web form formatter that dumps text box elements one below another in a rigid vertical list, nor a chaotic generator that scatters random words in 4 different corners. Act like an elite graphic artist who treats typography as structural art. Use breathing room, elegant high-fashion typography rules, purposeful asymmetry, and luxury spacing.
+🎨 THE 5 HIGH-FIDELITY CONTEXTUAL ARCHETYPES:
+You MUST classify the campaign into one of these 5 Design Archetypes based on campaign details (industry, pillar, intent, products).
 
-🎨 CREATIVE DIRECTION FOR THIS POST: ${creativeDirection}
+CRITICAL LEGIBILITY DIRECTIVE:
+If the post copy contains a checklist of steps, features, or dense descriptive copy (even for skincare or other B2C/D2C brands!), you MUST select the "editorial_left_bleed" archetype with layoutType="editorial_column" and requireGlassmorphism=false. This activates a premium white-to-transparent left panel gradient overlay that perfectly protects text readability against complex background details.
+
+1. "organic_minimalist" (Best for: Skincare, Cosmetics, Wellness, Fine Jewelry, Organic food/drinks)
+   - Typographic Style: Elegant display Serif (e.g., "Lora", "Playfair Display") paired with soft geometric Sans-serif ("Plus Jakarta Sans", "Inter")
+   - Structural Layout: Borderless floating text overlays or lightweight rounded organic glass speech bubble reviews (.bubble-speech class). Floating check star grids (e.g. ★★★★★) and circular ingredient callouts.
+   - Color Mood: Travertine stone beige, soft cream, champagne, warm rose accents.
+   - Variable Mappings: Use var(--headline-color) for text, var(--accent-color) for star grids and badge accents.
+
+2. "cyberpunk_grid" (Best for: Software, SaaS, Tech, Analytics, Fintech, AI Tools)
+   - Typographic Style: Modern high-tech geometric Sans-serif (e.g., "Space Grotesk", "Outfit")
+   - Structural Layout: Pinned dark semi-transparent card (.cyber-glow class) with neon accent glows. High-tech details: grid blocks, metric cards with thin neon borders, circular check circles.
+   - Color Mood: Deep carbon black, slate grey, glowing neon cyan/indigo, electric ultraviolet.
+   - Variable Mappings: Card container background should be var(--card-bg) with border var(--card-border). Highlights use var(--accent-color).
+
+3. "split_comparison" (Best for: Product Battles, "Us vs. Them", Promos, Case Studies)
+   - Typographic Style: Heavy bold geometric Sans-serif (e.g., "Montserrat", "Bebas Neue", "Archivo Black")
+   - Structural Layout: Side-by-side or stacked split boxes comparing "Our Way/Brand" (using emerald check shields) vs. "Them/Others" (using rose cross shields). High visual contrast.
+   - Color Mood: Vibrant emerald green, deep rose-red, contrast slate and pure white.
+   - Variable Mappings: Header text uses var(--headline-color), comparison boxes use emerald/rose borders.
+
+4. "editorial_left_bleed" (Best for: How-Tos, Guides, Educational Courses, Intent-based step lists)
+   - Typographic Style: Traditional sophisticated Serif (e.g., "Prata", "Cinzel", "Lora")
+   - Structural Layout: Full-height left side gradient panel overlaying the canvas. Uses background: linear-gradient(to right, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.94) 50%, rgba(255,255,255,0) 100%); for pristine contrast. All copy (Badge, Title, Subtitle, Numbered Steps, CTA) stacked in a perfectly left-aligned vertical column.
+   - Color Mood: Paper white, charcoal grey text, luxurious gold/brass accent details.
+   - Variable Mappings: Always use var(--headline-color) (dark charcoal/slate) for text and var(--accent-color) for step numbers and gold accents. Never use white text.
+
+5. "brutalist_block" (Best for: Cafe, Beverage, Youth Fashion, Streetwear, Bold Promo deals)
+   - Typographic Style: Massive ultra-bold Sans-serif (e.g., "Archivo Black", "Anton", "Bungee")
+   - Structural Layout: Opaque solid backing card (.brutalist-card class) with a thick solid border and a block shadow (e.g., border: 3.5px solid var(--headline-color); box-shadow: 6px 6px 0px var(--headline-color);). Uses starbursts, warning stripe dividers, and huge CTA buttons.
+   - Color Mood: High-voltage electric orange, caution yellow, bright primary colors, pure solid black.
+   - Variable Mappings: Backing card uses var(--card-bg) and var(--card-border). Headlines use var(--headline-color) with massive bold styles.
 
 📐 CANVAS DIMENSIONS: ${params.canvasDimensions ? `${params.canvasDimensions.width}px × ${params.canvasDimensions.height}px` : '1080px × 1080px'} (social media post).
 This is a ${params.canvasDimensions ? (params.canvasDimensions.width === params.canvasDimensions.height ? 'SQUARE' : params.canvasDimensions.width > params.canvasDimensions.height ? 'LANDSCAPE' : 'PORTRAIT') : 'SQUARE'} format.
 
-MANDATORY TYPOGRAPHIC SIZING (CSS CLASSES ARE PRE-INJECTED — YOU MUST USE THEM):
-The HTML renderer has pre-injected the following CSS classes. You MUST use these classes on every text element. You MAY override font-size with inline styles — your inline styles will win over the defaults.
-
-REQUIRED CSS CLASSES (use these on every element):
-- class='ad-headline'  → default 42px, weight 800, line-height 1.15 (override inline for bigger: style="font-size:3rem")
-- class='ad-subtitle'  → default 18px, line-height 1.55 (override inline for bigger: style="font-size:1.4rem")
-- class='ad-body ad-feature' → default 15px (override inline: style="font-size:0.9rem")
-- class='ad-badge'     → default 11px, uppercase, letter-spaced (for tiny labels, watermarks, brand tags)
-- class='ad-cta'       → default 13px, bold, generous padding (for CTA buttons)
-
-MANDATORY CONTRAST PROTECTION (SUNBEAM SHIELD):
-When placing text DIRECTLY over the background (without a frosted glass card or solid backplate), you MUST add class='text-contrast-shield' to EVERY text element. This adds a heavy multi-layer drop shadow that keeps text readable even when it crosses bright sunbeams, reflections, or white areas in the background.
-- For light text on mixed dark/bright backgrounds: class='ad-headline text-contrast-shield'
-- For dark text on mixed light backgrounds: class='ad-headline text-contrast-shield-light'
-- If you ARE using a frosted glass backplate container, the shield is optional (the backplate provides contrast).
-- DO NOT use Tailwind text-size classes (text-sm, text-lg, text-2xl etc). They are forbidden.
-
 ${slideContext}
 
-CRITICAL AD AGENCY DESIGN PRINCIPLES:
+REQUIRED CSS CLASSES (pre-injected in htmlRenderer):
+- class='ad-headline'  → default 42px, weight 800, line-height 1.15
+- class='ad-subtitle'  → default 18px, line-height 1.55
+- class='ad-body ad-feature' → default 15px
+- class='ad-badge'     → default 11px, uppercase, letter-spaced (for brand/industry tags)
+- class='ad-cta'       → default 13px, bold, generous padding (for CTA buttons)
 
-1. COMPOSITION ELEVATION & GRID ALIGNMENT (VERTICALLY STACKED OR HORIZONTALLY SPLIT):
-   - Choose the internal layout structure based on the archetype:
-     * **For editorial_left_bleed**: DO NOT split horizontally! You MUST stack the Brand tag, Title, Subtitle/Description, Checklist Features, and CTA Button in a single, perfectly left-aligned vertical column. Keep alignment perfectly flush to a strict invisible left axis.
-     * **For product-centric or standard cards**: You may use horizontal splitting or multi-column grids (Checklist on the left, CTA on the right) inside the card to keep things dynamic.
-   - ALIGNMENT DISCIPLINE (RIGID INNER GRID): Once you group elements into a cluster (e.g. Title + Subtitle + Button in one quadrant), you MUST maintain a rigid internal typographic grid! If your text is left-aligned, anchor the button perfectly to the left. Do NOT let buttons or features float arbitrarily in the center while text is left-aligned. Messy, unanchored elements look cheap. Every element inside a cluster must align to a strict invisible axis.
-   - Separate content into logical spatial clusters: place a tiny, high-letterspaced badge floating elegantly in an upper corner of your container, separate from the title, to make the layout feel spacious and alive.
-   - Use high-fashion spacing: give elements "breathing room" (large margins / padding / margins) so the text card is integrated with the background negative space rather than overwhelming it.
+ARCHETYPE CLASS UTILITIES (pre-injected in htmlRenderer):
+- class='brutalist-card' → thick borders + block shadows
+- class='cyber-glow'     → modern glow container border + soft shadow
+- class='bubble-speech'  → rounded review bubble with speech notch
+- class='text-contrast-shield' → heavy multi-layer text drop shadow for light text on dark backgrounds
+- class='text-contrast-shield-light' → heavy multi-layer text glow for dark text on light backgrounds
 
-2. CONTAINER STYLE FREEDOM (STOP DEFAULTING TO GLASSMORPHISM!):
-   - Glassmorphism (frosted glass cards with backdrop-filter blur) is just ONE of many container styles. Do NOT use it by default! 
-   - ACTIVELY ROTATE between these container archetypes based on the creative direction:
-     * **editorial_left_bleed** (Premium Left-Side Gradient Panel): A full-height side panel on the left (\`layoutType: "editorial_column"\`, \`requireGlassmorphism: false\`) backed by a beautiful white-to-transparent (or very light brand-color-tinted to transparent) horizontal linear gradient overlay (e.g., 'background: linear-gradient(to right, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%);'). All text sits directly on this gradient in a highly readable, high-contrast dark color (deep navy, charcoal, or dark slate like '#0B3C5D' or '#0F172A' matching the brand colors) with NO dropshadows. Perfect for high-fidelity B2B SaaS, learning, and professional service ads!
-     * **Borderless Floating Text**: No container at all! Just large dramatic typography with strong text-shadows (text-shadow: 0 2px 8px rgba(0,0,0,0.7)) floating directly on the background. Perfect for editorial and magazine-style ads. Set requireGlassmorphism to false.
-     * **Brutalist Solid Block**: Opaque, bold, geometric containers with thick borders or accent strips. No blur. Set requireGlassmorphism to false.
-     * **Subtle Semi-transparent**: A very lightweight semi-transparent container (rgba background at 0.15-0.25 opacity) with NO blur, NO border. Clean and modern. Set requireGlassmorphism to false.
-     * **Glassmorphism Card**: Use this sparingly — only when the creative direction explicitly mentions glass, frosted, or translucent aesthetics. Set requireGlassmorphism to true.
-   - CRITICAL: If the creative direction says "brutalist", "editorial", "minimal", "floating", "cinematic", "matte", "bold", or "vintage" — you MUST NOT use glassmorphism! Use borderless text, gradient panels, or solid blocks instead.
-   - ABSOLUTE CONTRAST LAW (NO ROOKIE MISTAKES): NEVER use pure white text (or light colors) on a bright, light, or sunlit background patch! If your typography is floating over a light background area, you MUST use a dark font color (e.g., #0f172a, #1e293b, or a dark shade of the brand color) OR you MUST put a dark opaque solid container behind the text! Do not rely solely on text-shadows to fix white text on a bright sunbeam.
+MANDATORY GLOBAL CSS VARIABLES RULE (DO NOT HARDCODE COLOR HEXES IN DYNAMICHTMLBLOCK):
+You MUST bind all color attributes in your HTML block to the CSS variables instead of hardcoding raw hex values. This is critical so the system can safely micro-tune color contrast afterward:
+- For primary text/headlines: color: var(--headline-color);
+- For secondary text/subtitles: color: var(--subtitle-color);
+- For features/bullets list: color: var(--subtitle-color);
+- For badges/highlights/icons: color: var(--accent-color); or border-color: var(--accent-color);
+- For main card container backgrounds: background: var(--card-bg);
+- For main card container borders: border: 1px solid var(--card-border);
+- For CTA buttons: background-color: var(--cta-bg); color: var(--cta-text);
 
-3. DRAMATIC TYPOGRAPHY & ELITE FONT PAIRING:
-   - Most premium ads use highly prominent, extra-large, bold headlines to immediately stop the scroll (e.g. style='font-size: 3rem; line-height: 1.05; font-family: Lora;').
-   - You MUST select contrasting font pairings: a highly stylish display Serif for the main headings ("Lora", "Playfair Display", "Cinzel", "Prata") paired with a clean, luxury sans-serif for description nodes ("Outfit", "Inter", "Plus Jakarta Sans").
-   - ELEGANT CURSIVE HIGHLIGHTS: To make the layout look premium like high-end magazine designs, you can wrap 1-2 core visual/emotional/action words in the Headline or Subtitle with a flowing, elegant cursive/handwriting highlight span: \`<span class="font-script text-accent-color">Community!</span>\` or \`<span class="font-script text-accent-color">Efficacy</span>\` or \`<span class="font-script text-accent-color">Difference</span>\`.
-   - If you do this, you MUST set \`useScriptHighlight: true\` in the returned JSON so that the cursive engines are loaded.
-   - CRITICAL: Render the exact copy nodes from the CopyBlueprint. Do not hallucinate or change the text. Your value is pure composition design and layout engineering.
-
-4. SOPHISTICATED COLORING & ACCENT HARMONY (CHOOSE CONTRAST-SAFE COLORS):
-   - You are explicitly requested to CHOOSE the hex colors for the text overlays and buttons to guarantee maximum visibility and premium visual appeal over the detected background color: "${avgColorName} (Hex: ${avgColorHex})" (isDarkBg: ${params.contrastMetrics.isDarkBg}).
-   - Choose:
-     * \`headlineColorOverride\`: The exact contrast-safe color for primary headlines. If the background under the text is dark, choose a light color (e.g. '#FFFFFF', '#F8FAFC', '#E2E8F0', soft warm cream). If the background is light/bright, choose a solid dark color (e.g. '#0F172A', '#1E293B', '#111111').
-     * \`subtitleColorOverride\`: The exact contrast-safe color for subtitles and description blocks. Choose a color that is slightly softer than the headline color but retains complete contrast (e.g., if headline is '#FFFFFF', subtitle could be '#E2E8F0' or '#CBD5E1'; if headline is '#0F172A', subtitle could be '#334155' or '#475569').
-     * \`accentColorOverride\`: A rich accent color for inline span highlights, checklist icons/circles, and badges (e.g. a beautiful gold '#D4AF37', warm amber, terracotta, or corporate blue/indigo '#6366F1') that contrasts perfectly with the backdrop.
-     * \`ctaBackgroundColorOverride\`: The solid color for the CTA button backplate. Choose a highly prominent color that stands out yet matches the layout (e.g. clean solid black, crisp pure white, or the brand's base/accent color).
-     * \`ctaTextColorOverride\`: The high-contrast text color for the CTA button text (e.g., '#FFFFFF' if the button background is dark/solid, or '#0F172A' / brand color if the button background is white).
-     * \`ctaIconStyle\`: The visual icon style inside the CTA button:
-       - "none": No icon inside the button.
-       - "inline": A simple trailing arrow icon inside the button (e.g. →).
-       - "circular_arrow": Renders a premium pill button containing a white leading circular arrow indicator (a white circle containing a colored right-facing arrow). Highly recommended for elegant, bold, and minimal layouts!
-   - Make headings modern and eye-catching by wrapping core key words/percentages in dual-tone spans: e.g., "Unlock Your <span style='color: ${accentColor};'>Potential</span>" using the chosen accent color.
-   - CRITICAL: NEVER use raw, highly saturated primary colors (like solid bright red or pure electric blue) for text overlays. Use curated, highly sophisticated tones from the brand visual palette that feel luxurious and blend naturally with real-world organic imagery.
-
-5. 3D LAYERS & THE MAGICAL SANDWICH DEPTH EFFECT:
-   - Under the hood, the pipeline supports realistic Z-Index sandwich stacking. If "typographyZIndex" is set to "behind", the typography sits slightly behind the prominent foreground product.
-   - Plan your composition to leverage this! Align your typography so it floats majestically in the solved empty quadrant ("${params.safestQuadrant}") while peeking behind or kissing the borders of the product scene.
-
-6. SPATIAL MAPPING & THE MASTER CONTAINER RULE (NO SCATTERING!):
-   - We have run a computer-vision saliency analysis to map the "negative space" in the background.
-   - The primary safe zone is "${params.safestQuadrant}".
-   - THE MASTER CONTAINER: You MUST place ALL your layout elements inside a SINGLE absolute positioned master container that anchors to the safe zones. 
-   - DO NOT create multiple independent absolute positioned root divs (e.g., do not put the title in one absolute div, and the button in another). Doing so destroys the internal grid alignment and scatters the layout randomly.
-   - Instead, create ONE master column or row (e.g., 'position: absolute; top: 0; left: 0; width: 40%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; padding: 60px;'). 
-   - By using 'justify-content: space-between' inside a 100% height Master Container, you can elegantly push the Headline to the top and the CTA button to the bottom, while keeping them perfectly left-aligned together!
-   - Use the following safe tiles as a guide for where to anchor your Master Container (if left tiles are safe, build a left column. If top tiles are safe, build a top bar):
+ALIGNMENT DISCIPLINE (RIGID INNER GRID):
+Maintain a strict internal typographic alignment. If text is left-aligned, anchor badges and buttons perfectly to the left. Do NOT let buttons or features float centered when text is left-aligned. Use breathing room and fashion spacing. Place the master container elegantly over the planned safe tiles:
 ${allowedCoordinatesStr}
-   - IMPORTANT: Only anchor to the valid tiles listed above! DO NOT hallucinate other tiles.
 
-7. REGIONAL ARCHITECTURAL MOTIFS:
-   - Target Geography: "${geography}". Infuse subtle layout motifs matching this culture:
-     * India: Thin elegant warm gold/brass accents, light marble backing colors, or marigold/terracotta highlights.
-     * West (US/Canada): Industrial chic, matte graphite backing cards, borderless floating structures, high-contrast crisp typography shadows.
-     * Singapore/East Asia: Biophilic structures, thin fresh bamboo-green borders, translucent glass outlines.
-     * UAE: Travertine/stone warm sand beige backplates, desert warm gold tones, majestic arches.
+AVAILABLE COMPONENTS (MIX, MATCH, AND ADAPT BASED ON THE ARCHETYPE):
 
-8. PREMIUM VALUE LISTS & VERTICAL ALIGNMENT CONSTRAINTS:
-   - If the ad features product features, value benefits, or ingredient callouts, do NOT throw them in a basic flat block list.
-   - Build a gorgeous vertical checkmark row list using inline flexbox rules. Keep checkmark items stacked vertically in a perfect straight line for clean structure. Ensure they align beautifully with a horizontal gap and utilize custom circular icon badges.
-   - Custom Luxury Checklist Badges: Choose the visual style of feature checklist badges:
-     * "translucent": Accent color translucent-glass badges (default).
-     * "solid": Solid accent-colored circular badges with crisp white outline icons (super modern and high-fashion).
-     * "double_ring": Thin double-ring outlined circles with thin outline icons (ultra-elegant, editorial look).
+1. HEADER BLOCK:
+   - Badge: <span class="ad-badge">INDUSTRY · TOPIC</span>
+   - Headline: <h1 class="ad-headline" style="font-family:'Lora',serif;">Word <span class="text-brand-accent">Highlight</span> <i data-lucide="sparkles" class="text-brand-accent" style="width:24px;height:24px;vertical-align:middle;display:inline-block;"></i></h1>
+   - Subtitle: <p class="ad-subtitle">Sentence description here.</p><span data-doodle="scribbleUnderline" data-doodle-color="var(--accent-color)"></span>
+   - Divider: <div class="divider-accent"></div>
 
-9. PROMOTIONAL SALE ENFORCEMENT:
-   - If a discount or offer is provided in the copy blueprint, you MUST emphasize it on the overlay! Make it the hero span or a luxurious top badge so the viewer sees the deal in The required intent is dictated by the CopyBlueprint's "intent" field. Design the layout to perfectly match this intent. For COMPARISON, use a split-screen layout. For TESTIMONIAL, use a quote block.
+2. NUMBERED STEP LIST (for educational / editorial_left_bleed):
+   <div style="display:flex; flex-direction:column; gap:12px; margin-top:6px;">
+     <div style="display:flex; align-items:flex-start; gap:10px;">
+       <span style="min-width:22px; height:22px; border-radius:50%; background:var(--accent-color); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">1</span>
+       <p class="ad-body ad-feature" style="margin:0;"><strong>Step Title</strong> description copy from CopyBlueprint.</p>
+     </div>
+   </div>
 
-FORBIDDEN PATTERNS (DO NOT PRODUCE THESE — THEY ARE LAZY, CHEAP, AND WILL BE REJECTED):
-❌ A glassmorphism card that spans the full width without any asymmetric offsets, floating pills, or column splits
-❌ Centering EVERYTHING: title, subtitle, features, button all centered in one block
-❌ Copy-pasting the same skeleton from the examples below without redesigning it for this specific post's content and intent
-❌ Leaving text without explicit inline color styles
+3. ICON CHECKLIST:
+   <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+     <div style="display:flex; align-items:center; gap:10px;">
+       <i data-lucide="check-circle" class="text-brand-accent" style="width:16px;height:16px;flex-shrink:0;display:inline-block;"></i>
+       <p class="ad-body ad-feature" style="margin:0;">Feature line from CopyBlueprint.</p>
+     </div>
+   </div>
 
-REQUIRED OUTPUT FORMAT:
-Output ONLY a valid JSON object matching the following structure.
-The most important field is \`dynamicHtmlBlock\` — a complete, self-contained HTML string that will be injected directly into a 1080×1080px Chromium browser canvas. This is REAL HTML rendered by a headless browser, not a description.
+4. STAT BLOCK (for cyberpunk_grid / proof content):
+   <div style="display:flex; align-items:center; gap:14px; margin-top:14px; padding:14px 18px; background:rgba(255,255,255,0.05); border-radius:12px; border-left:3px solid var(--accent-color);">
+     <span style="font-size:2.2rem; font-weight:800; color:var(--accent-color); line-height:1;">VALUE</span>
+     <p class="ad-body" style="margin:0; font-size:0.8rem; color:var(--subtitle-color);">Label description here</p>
+   </div>
 
-DYNAMICHTMLBLOCK RULES — COMPONENT TOOLKIT APPROACH:
-The components below are a TOOLKIT — mix, match, and adapt them based on the creative direction and content intent. Do NOT always use the same pattern. Choose the layout archetype that best fits the creative direction assigned to this post.
+5. FLOATING REVIEW CARD (for organic_minimalist / testimonials):
+   <div class="bubble-speech" style="padding:16px 18px; margin-top:16px;">
+     <div style="display:flex; gap:2px; margin-bottom:6px; color:var(--accent-color);">★★★★★</div>
+     <p style="font-size:1.1rem; font-weight:700; color:var(--headline-color); font-style:italic; margin:0; line-height:1.35;">"Quote from CopyBlueprint"</p>
+     <p class="ad-body" style="margin:6px 0 0 0; font-size:0.75rem; color:var(--subtitle-color);">— Customer Attribution</p>
+   </div>
 
----
-LAYOUT ARCHETYPE A — EDITORIAL LEFT GRADIENT PANEL (best for: educational, step-by-step, B2B, professional):
-Master container: white-to-transparent gradient on the left 46%, dark text, vertical column layout.
-style="position:absolute; top:0; left:0; width:46%; height:calc(100% - 70px); padding:52px 44px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; background:linear-gradient(to right, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.93) 55%, rgba(255,255,255,0) 100%);"
-Text colors: headline #0F172A, subtitle #334155, features #1E293B. NEVER use white text on this panel.
+6. DECORATIVE DOODLES (scatter 1-2 visually):
+   <span data-doodle="starBurst" data-doodle-color="var(--accent-color)"></span>
+   <span data-doodle="waveLine" data-doodle-color="var(--accent-color)"></span>
 
-LAYOUT ARCHETYPE B — DARK CARD OVERLAY (best for: bold neon, cyberpunk, luxury dark, cinematic):
-Master container: semi-opaque dark card anchored to the safe quadrant.
-style="position:absolute; top:60px; left:48px; width:44%; background:rgba(10,10,20,0.82); border-radius:16px; padding:40px 36px; display:flex; flex-direction:column; gap:16px; border:1px solid rgba(255,255,255,0.08);"
-Text colors: headline #FFFFFF or #F8FAFC, subtitle #CBD5E1, accent color for highlights.
+7. CTA BUTTON (always required, pinned to bottom):
+   <button class="ad-cta">CTA TEXT →</button>
 
-LAYOUT ARCHETYPE C — FLOATING BORDERLESS TEXT (best for: editorial magazine, minimalist, vintage, organic):
-No container background — text floats directly on the background with strong contrast shields.
-style="position:absolute; top:0; left:0; width:46%; height:calc(100% - 70px); padding:52px 44px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start;"
-Add class="text-contrast-shield" or class="text-contrast-shield-light" to every text element based on background lightness.
-
----
-AVAILABLE COMPONENTS (use the ones that fit your chosen archetype):
-
-HEADER BLOCK:
-- Badge: <span class="ad-badge" style="color:ACCENT_COLOR; letter-spacing:0.18em; border-left:3px solid ACCENT_COLOR; padding-left:8px;">INDUSTRY · TOPIC</span>
-- Headline with accent span + icon: <h1 class="ad-headline" style="color:TEXT_COLOR; font-size:2.6rem; line-height:1.1; margin:8px 0 0 0;">Word <span style="color:ACCENT_COLOR;">Word</span> <i data-lucide="sparkles" style="width:24px;height:24px;color:ACCENT_COLOR;vertical-align:middle;"></i></h1>
-- Subtitle + scribble underline: <p class="ad-subtitle" style="color:SUBTITLE_COLOR; margin:8px 0 4px 0;">Sentence.</p><span data-doodle="scribbleUnderline" data-doodle-color="ACCENT_COLOR"></span>
-- Thin divider: <div class="divider-accent" style="margin:10px 0;"></div>
-
-NUMBERED STEP LIST (for educational/how-to content):
-<div style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
-  <div style="display:flex; align-items:flex-start; gap:10px;">
-    <span style="min-width:22px; height:22px; border-radius:50%; background:ACCENT_COLOR; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">1</span>
-    <div style="display:flex; align-items:flex-start; gap:6px;">
-      <i data-lucide="droplets" style="width:14px;height:14px;color:ACCENT_COLOR;flex-shrink:0;margin-top:3px;"></i>
-      <p class="ad-body ad-feature" style="color:FEATURE_COLOR; margin:0;"><strong>KeyWord</strong> full sentence from CopyBlueprint.</p>
-    </div>
-  </div>
-</div>
-
-ICON CHECKLIST (for product highlights, B2B features):
-<div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-  <div style="display:flex; align-items:center; gap:10px;">
-    <i data-lucide="check-circle" style="width:16px;height:16px;color:ACCENT_COLOR;flex-shrink:0;"></i>
-    <p class="ad-body ad-feature" style="color:FEATURE_COLOR; margin:0;">Feature text from CopyBlueprint.</p>
-  </div>
-</div>
-
-STAT BLOCK (for proof/metrics content):
-<div style="display:flex; align-items:center; gap:12px; margin-top:12px; padding:12px 16px; background:rgba(ACCENT_RGB,0.08); border-radius:10px; border-left:3px solid ACCENT_COLOR;">
-  <span style="font-size:2rem; font-weight:800; color:ACCENT_COLOR; line-height:1;">40%</span>
-  <p class="ad-body" style="color:FEATURE_COLOR; margin:0; font-size:0.75rem;">Clinically proven improvement in skin hydration</p>
-</div>
-
-FLOATING CALLOUT CARD (for quotes, testimonials, key insights):
-<div style="background:rgba(ACCENT_RGB,0.07); border:1.5px solid ACCENT_COLOR; border-radius:14px; padding:14px 16px; margin-top:14px; position:relative;">
-  <i data-lucide="heart" style="width:16px;height:16px;color:ACCENT_COLOR;margin-bottom:4px;display:block;"></i>
-  <p style="font-size:1.05rem; font-weight:700; color:ACCENT_COLOR; font-style:italic; margin:0; line-height:1.3;">"Quote from CopyBlueprint"</p>
-  <p class="ad-body" style="color:#475569; margin:6px 0 0 0; font-size:0.72rem;">Attribution line</p>
-  <span data-doodle="confettiDots" data-doodle-color="ACCENT_COLOR" style="position:absolute;top:8px;right:8px;opacity:0.5;"></span>
-</div>
-
-DECORATIVE DOODLES (scatter 1-2 for visual richness):
-<span data-doodle="starBurst" data-doodle-color="ACCENT_COLOR" style="display:inline-block;margin-left:4px;"></span>
-<span data-doodle="waveLine" data-doodle-color="ACCENT_COLOR" style="display:block;margin:8px 0;"></span>
-<span data-doodle="scribbleUnderline" data-doodle-color="ACCENT_COLOR"></span>
-
-CTA BUTTON (always required, pinned to bottom):
-<button class="ad-cta" style="background:CTA_BG; color:CTA_TEXT; border-radius:8px; border:none; display:flex; align-items:center; gap:8px; max-width:100%; word-break:break-word;">CTA TEXT →</button>
-
----
 RULES:
-- Replace ACCENT_COLOR, TEXT_COLOR, SUBTITLE_COLOR, FEATURE_COLOR, CTA_BG, CTA_TEXT with actual hex values
-- The right 54% of the canvas is the AI background — do NOT place elements there
-- The bottom 70px is the footer bar — do NOT place elements there
-- Use Tailwind utility classes freely. Do NOT use Tailwind text-size classes (text-sm, text-lg etc)
-- The HTML must be a single root <div>. Escape all double quotes with \\\\ inside the JSON string
-- Render ALL elements from the CopyBlueprint — every feature, badge, statistic, and quote
-
-EXAMPLE dynamicHtmlBlock (editorial left column with full content — copy this pattern):
-The dynamicHtmlBlock must look like this — a real, complete HTML string with ALL copy elements rendered inline:
-
-\`<div style="position: absolute; top: 0; left: 0; width: 46%; height: calc(100% - 70px); padding: 52px 48px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; background: linear-gradient(to right, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.93) 55%, rgba(255,255,255,0) 100%);"><div style=\\"display:flex;flex-direction:column;gap:14px;\\"><span class=\\"ad-badge\\" style=\\"color:#B45309;letter-spacing:0.18em;\\">SKINCARE ESSENTIALS</span><h1 class=\\"ad-headline\\" style=\\"color:#0F172A;font-size:2.8rem;line-height:1.1;margin:0;\\">Glowing <span style=\\"color:#D97706;\\">Morning</span> Routines</h1><p class=\\"ad-subtitle\\" style=\\"color:#334155;margin:0;\\">5 simple steps for busy Indian women to achieve healthy, glowing skin.</p><div style=\\"display:flex;flex-direction:column;gap:10px;margin-top:4px;\\"><div style=\\"display:flex;align-items:flex-start;gap:10px;\\"><span style=\\"min-width:22px;height:22px;border-radius:50%;background:#D97706;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;\\">1</span><p class=\\"ad-body ad-feature\\" style=\\"color:#1E293B;margin:0;\\"><strong>Cleanse</strong> with a gentle face wash to remove overnight impurities and prep your skin.</p></div><div style=\\"display:flex;align-items:flex-start;gap:10px;\\"><span style=\\"min-width:22px;height:22px;border-radius:50%;background:#D97706;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;\\">2</span><p class=\\"ad-body ad-feature\\" style=\\"color:#1E293B;margin:0;\\"><strong>Apply</strong> a few drops of Hyaluronic Acid Serum for an instant hydration boost.</p></div><div style=\\"display:flex;align-items:flex-start;gap:10px;\\"><span style=\\"min-width:22px;height:22px;border-radius:50%;background:#D97706;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;\\">3</span><p class=\\"ad-body ad-feature\\" style=\\"color:#1E293B;margin:0;\\"><strong>Lock in</strong> moisture with a nourishing Anti-Aging Cream to reduce fine lines.</p></div></div></div><button class=\\"ad-cta\\" style=\\"background:#0F172A;color:#FFFFFF;border-radius:8px;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;\\">Start Your Journey →</button></div>\`
-
-{
-  "designArchetype": "editorial_left_bleed",
-  "visual_reasoning": "1. Full-height left gradient panel. 2. Badge top, headline with accent span, subtitle, numbered step list. 3. CTA pinned to bottom.",
-  "layoutType": "editorial_column",
-  "requireGlassmorphism": false,
-  "containerPadding": "p-12",
-  "backgroundColorOverride": "transparent",
-  "textColorOverride": "#0F172A",
-  "headlineColorOverride": "#0F172A",
-  "subtitleColorOverride": "#334155",
-  "accentColorOverride": "#D97706",
-  "ctaBackgroundColorOverride": "#0F172A",
-  "ctaTextColorOverride": "#FFFFFF",
-  "badgeStyle": "solid",
-  "ctaIconStyle": "inline",
-  "useScriptHighlight": false,
-  "typographyZIndex": "in_front",
-  "dynamicHtmlBlock": "<div style=\\"position: absolute; top: 0; left: 0; width: 46%; height: calc(100% - 70px); padding: 52px 48px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; background: linear-gradient(to right, rgba(255,255,255,0.97) 0%, rgba(255,255,255,0.93) 55%, rgba(255,255,255,0) 100%);\\">...[FULL HTML with all copy elements]...</div>"
-}
-
+- The right 54% of the canvas is the background image scene — do NOT place elements there.
+- The bottom 70px is reserved for the persistent brand footer — do NOT place elements there.
+- Use Tailwind utility classes freely. Do NOT use Tailwind text-size classes (text-sm, text-lg etc).
+- Render ALL elements from the CopyBlueprint — every feature, badge, statistic, and quote.
+- CRITICAL TESTIMONIAL RULE: If the CopyBlueprint contains a "quote" element (or is a TESTIMONIAL intent), you MUST render it as a floating speech-bubble review card using the 'bubble-speech' class. Inside this card, display 5 gold stars (★★★★★) colored in var(--accent-color), the review quote text in elegant italic quotes using var(--headline-color), and the customer name/attribution text (prefixed with "— ") in var(--subtitle-color). This card must be rendered beautifully with good padding, looking like a premium floating social proof block. Failing to display the customer review is a critical design failure.
+- The dynamicHtmlBlock must be a single root <div>. Escape all double quotes with \\\\ inside the JSON.
 
 Visual Ad Context:
 - Background Image Scene Prompt: "${params.imagePrompt}"
@@ -408,12 +312,8 @@ Visual Ad Context:
 - Brand Base Color: "${params.baseColor}"
 - Brand Accent Color: "${accentColor}"
 - Deterministic Safe Quadrant: "${params.safestQuadrant}"
-- Quadrant Occupancy Scores (0 = Empty, 1 = Occupied): ${JSON.stringify(params.quadrantScores || {}, null, 2)}
-- Grayscale Background Lightness: "${params.contrastMetrics.isDarkBg ? 'Dark (requires light typography)' : 'Light (requires dark typography)'}"
+- Grayscale Background Lightness: "${params.contrastMetrics.isDarkBg ? 'Dark' : 'Light'}"
 - Dominant Background Color under Text: "${avgColorName} (Hex: ${avgColorHex})"
-${regionsInfoStr}
-- Resolved High-Contrast Headline Color: "${headlineColor}"
-- Resolved High-Contrast Subtitle Color: "${subtitleColor}"
 
 Provided CopyBlueprint (USE THESE EXACT TEXT NODES):
 \`\`\`json
@@ -421,12 +321,32 @@ ${JSON.stringify(params.copyBlueprint, null, 2)}
 \`\`\`
 ${feedbackSection}
 
-FINAL MANDATE: You are an award-winning Creative Director. The layout you produce MUST feel like it was designed by a real human expert at a premium agency — NOT generated by a template engine. Study the creative direction assigned to this post, study the content intent, and create something genuinely surprising and beautiful. For D2C: think Glossier, Hey Bud, Bite, Blume, Loewe. For B2B/Enterprise: think Stripe, Linear, Vercel, Notion.
-If the slideIndex is defined (Slide 1, 2, or 3), design the layout specifically for that carousel position: Slide 1 = Feature showcase, Slide 2 = Proof/metrics, Slide 3 = CTA/conversion close.
-Use the forbidden patterns list as a checklist — if your layout matches any of those patterns, redesign it completely before responding.
-
-CRITICAL: You MUST include a \`dynamicHtmlBlock\` field in your JSON output. This is the most important field — it is the actual HTML that will be rendered by a headless Chromium browser at ${params.canvasDimensions ? `${params.canvasDimensions.width}×${params.canvasDimensions.height}px` : '1080×1080px'}. Write real, complete, production-quality HTML. Use the exact copy text from the CopyBlueprint. Render ALL elements from the CopyBlueprint — every feature, badge, statistic, and quote must appear in the HTML. The JSON design tokens (layoutType, fontFamily, etc.) are secondary — the \`dynamicHtmlBlock\` is the primary output.
-Output ONLY the JSON object.`;
+OUTPUT FORMAT:
+Output ONLY a valid JSON object matching the LayoutBlueprint schema:
+{
+  "designArchetype": "organic_minimalist" | "cyberpunk_grid" | "split_comparison" | "editorial_left_bleed" | "brutalist_block",
+  "visual_reasoning": "1-sentence explanation of chosen archetype and grid alignment matching the post intent",
+  "layoutType": "classic" | "feature_list" | "editorial_column" | "split_screen" | "liquid",
+  "requireGlassmorphism": boolean,
+  "fontFamily": string (e.g. "Lora", "Space Grotesk", "Montserrat", "Playfair Display", "Bebas Neue", "Archivo Black"),
+  "subtitleFontFamily": "Plus Jakarta Sans" | "Inter",
+  "headlineWeight": "black" | "bold" | "semibold" | "medium",
+  "fontSizeScale": number (0.85 to 1.15),
+  "containerPadding": "p-6" | "p-8" | "p-10" | "p-12",
+  "backgroundColorOverride": string,
+  "textColorOverride": string,
+  "headlineColorOverride": string,
+  "subtitleColorOverride": string,
+  "accentColorOverride": string,
+  "ctaBackgroundColorOverride": string,
+  "ctaTextColorOverride": string,
+  "badgeStyle": "translucent" | "solid" | "double_ring",
+  "ctaIconStyle": "none" | "inline" | "circular_arrow",
+  "useScriptHighlight": boolean,
+  "typographyZIndex": "behind" | "in_front",
+  "dynamicHtmlBlock": "<div style=\\"position: absolute; top: 0; left: 0; width: 46%; height: calc(100% - 70px); padding: 52px 48px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; background: var(--card-bg); border: 1px solid var(--card-border);\\">...[HTML with CSS variables and all elements]...</div>"
+}
+Output ONLY the raw JSON object.`;
 
   try {
     const completion = await callLlm({
@@ -480,4 +400,116 @@ export function determineGlassmorphism(params: {
 }): boolean {
   logger.info(`Definitive glassmorphism decider: LLM suggested=${params.llmRequireGlassmorphism}, bgOpacityOverride=${params.bgOpacityOverride.toFixed(3)}`);
   return params.llmRequireGlassmorphism;
+}
+
+/**
+ * Post-processes the LLM-generated dynamicHtmlBlock to adapt it to the actual generated
+ * background image's local color and luminance metrics once the image is available.
+ * This ensures perfect legibility for floating text and adaptive styling.
+ */
+export function microTuneHtmlContrast(
+  htmlBlock: string | undefined,
+  contrastMetrics: {
+    isDarkBg: boolean;
+    headlineColor: string;
+    subtitleColor: string;
+    averageColorHex: string;
+    accentColor?: string;
+  },
+  requireGlassmorphism: boolean,
+  layoutType: string
+): string {
+  if (!htmlBlock) return '';
+
+  const isLeftBleed = layoutType === 'editorial_column' || htmlBlock.includes('linear-gradient') || htmlBlock.includes('background:linear-gradient') || htmlBlock.includes('background: linear-gradient');
+
+  logger.info(`Micro-tuning HTML contrast via Global CSS Variables: isDarkBg=${contrastMetrics.isDarkBg}, averageColor=${contrastMetrics.averageColorHex}, requireGlassmorphism=${requireGlassmorphism}, isLeftBleed=${isLeftBleed}`);
+
+  // 1. Resolve high-contrast colors dynamically based on background luminance
+  let headlineColor = contrastMetrics.headlineColor;
+  let subtitleColor = contrastMetrics.subtitleColor;
+  
+  if (isLeftBleed) {
+    // Left gradient panel is always clean paper white/light, so text is dark charcoal/slate
+    headlineColor = '#0F172A';
+    subtitleColor = '#334155';
+  } else {
+    if (contrastMetrics.isDarkBg) {
+      headlineColor = headlineColor || '#FFFFFF';
+      subtitleColor = subtitleColor || '#CBD5E1';
+    } else {
+      headlineColor = headlineColor || '#0F172A';
+      subtitleColor = subtitleColor || '#334155';
+    }
+  }
+
+  // 2. Resolve card background and borders
+  let cardBg = 'transparent';
+  let cardBorder = 'transparent';
+
+  if (isLeftBleed) {
+    const isRightAligned = htmlBlock.includes('right:') || htmlBlock.includes('right_bleed') || htmlBlock.includes('justify-end') || htmlBlock.includes('justify-content: flex-end') || htmlBlock.includes('justify-content:flex-end');
+    const direction = isRightAligned ? 'to left' : 'to right';
+    cardBg = `linear-gradient(${direction}, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%)`;
+    cardBorder = 'transparent';
+  } else if (requireGlassmorphism) {
+    if (contrastMetrics.isDarkBg) {
+      cardBg = 'rgba(10, 10, 20, 0.65)';
+      cardBorder = 'rgba(255, 255, 255, 0.08)';
+    } else {
+      cardBg = 'rgba(255, 255, 255, 0.82)';
+      cardBorder = 'rgba(0, 0, 0, 0.08)';
+    }
+  }
+
+  // 3. Resolve premium, legibility-guaranteed CTA colors
+  let ctaBg = '#0F172A';
+  let ctaText = '#FFFFFF';
+
+  if (contrastMetrics.isDarkBg && !isLeftBleed) {
+    // Dark background: white button with dark text is extremely legible and premium
+    ctaBg = '#FFFFFF';
+    ctaText = '#0F172A';
+  } else {
+    // Light background: use rich dark button
+    ctaBg = '#0F172A';
+    ctaText = '#FFFFFF';
+  }
+
+  // We keep the accent color as provided or soft amber/indigo fallback
+  const accentColor = contrastMetrics.accentColor || (contrastMetrics.isDarkBg ? '#FBBF24' : '#4F46E5');
+
+  // 4. Construct a clean global CSS override block
+  const styleOverride = `
+<style>
+  :root {
+    --headline-color: ${headlineColor} !important;
+    --subtitle-color: ${subtitleColor} !important;
+    --accent-color: ${accentColor} !important;
+    --card-bg: ${cardBg} !important;
+    --card-border: ${cardBorder} !important;
+    --cta-bg: ${ctaBg} !important;
+    --cta-text: ${ctaText} !important;
+  }
+  
+  /* Pinned contrast shields for borderless typography over organic image scenes */
+  ${!requireGlassmorphism && !isLeftBleed ? `
+  .ad-headline {
+    text-shadow: ${contrastMetrics.isDarkBg
+      ? '0px 4px 18px rgba(0,0,0,0.65), 0px 2px 8px rgba(0,0,0,0.45)'
+      : '0px 4px 18px rgba(255,255,255,0.75), 0px 2px 8px rgba(255,255,255,0.55)'
+    } !important;
+  }
+  .ad-subtitle, .ad-feature, .ad-body {
+    text-shadow: ${contrastMetrics.isDarkBg
+      ? '0px 2px 10px rgba(0,0,0,0.8), 0px 4px 20px rgba(0,0,0,0.5)'
+      : '0px 2px 10px rgba(255,255,255,0.8), 0px 4px 20px rgba(255,255,255,0.5)'
+    } !important;
+  }
+  ` : ''}
+</style>
+`;
+
+  // Prepend the style override block to the LLM-generated HTML content
+  return `${styleOverride.trim()}\n${htmlBlock}`;
 }

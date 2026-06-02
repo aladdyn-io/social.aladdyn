@@ -447,7 +447,7 @@ export async function renderAdComposite({
     const headlineFallback = getFontFallback(headlineFont);
     const subtitleFallback = getFontFallback(subtitleFont);
     
-    const isLeftBleed = templateStyle === 'editorial_left_bleed' || templateStyle.includes('left_bleed') || templateStyle.includes('gradient');
+    const isLeftBleed = templateStyle === 'editorial_left_bleed' || templateStyle.includes('left_bleed') || templateStyle.includes('gradient') || layoutType === 'editorial_column';
     const finalTextColor = isLeftBleed 
       ? '#0F172A' // Always dark slate on white left-bleed panels
       : (bp.headlineColorOverride || bp.textColorOverride || colors.headlineColor);
@@ -455,7 +455,18 @@ export async function renderAdComposite({
       ? '#1E293B' // Always dark charcoal on white left-bleed panels
       : (bp.subtitleColorOverride || bp.textColorOverride || colors.subtitleColor);
     const accentColor = finalTextColor || brandAccentColor || colors.headlineColor;
-    const fontMultiplier = bp.fontSizeScale || 1.0;
+
+    // Typographic Font-Size Auto-Scaler
+    let autoScaleFactor = 1.0;
+    const headlineLength = (headline || '').length;
+    if (headlineLength > 45) {
+      autoScaleFactor = 0.76;
+    } else if (headlineLength > 30) {
+      autoScaleFactor = 0.86;
+    } else if (headlineLength > 20) {
+      autoScaleFactor = 0.94;
+    }
+    const fontMultiplier = (bp.fontSizeScale || 1.0) * autoScaleFactor;
 
     const featureList = resolveFeatureList(subtitle, headline, bp.features);
     
@@ -503,9 +514,11 @@ export async function renderAdComposite({
     }
 
     // Apply template themes
-    if (templateStyle === 'editorial_left_bleed' || templateStyle.includes('left_bleed') || templateStyle.includes('gradient')) {
+    const isRightAligned = finalQuadrant.toLowerCase().includes('right');
+    const gradDir = isRightAligned ? 'to left' : 'to right';
+    if (templateStyle === 'editorial_left_bleed' || templateStyle.includes('left_bleed') || templateStyle.includes('gradient') || layoutType === 'editorial_column') {
       containerClass = `h-full max-w-[540px] p-16 flex flex-col justify-between transition-all duration-300`;
-      containerStyle = `background: linear-gradient(to right, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%); border: none !important; box-shadow: none !important;`;
+      containerStyle = `background: linear-gradient(${gradDir}, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%); border: none !important; box-shadow: none !important;`;
       headlineFontClass = 'font-serif font-bold leading-tight';
       bodyFontClass = 'text-base font-normal leading-relaxed';
       buttonStyle = `background-color: ${btnBg}; color: ${btnText}; border-radius: 9999px; font-weight: 800;`;
@@ -729,10 +742,12 @@ export async function renderAdComposite({
       verticalAlign = 'items-stretch';
       horizontalAlign = quad.includes('right') ? 'justify-end' : 'justify-start';
       
-      const isLeftBleed = templateStyle === 'editorial_left_bleed' || templateStyle.includes('left_bleed') || templateStyle.includes('gradient');
+      const isLeftBleed = templateStyle === 'editorial_left_bleed' || templateStyle.includes('left_bleed') || templateStyle.includes('gradient') || layoutType === 'editorial_column';
       if (isLeftBleed) {
-        containerClass = `h-full max-w-[540px] p-16 flex flex-col justify-between transition-all duration-300 ${quad.includes('right') ? 'border-l' : 'border-r'}`;
-        containerStyle = `background: linear-gradient(to right, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%); border: none !important; box-shadow: none !important;`;
+        const isRightAligned = quad.includes('right');
+        const gradDir = isRightAligned ? 'to left' : 'to right';
+        containerClass = `h-full max-w-[540px] p-16 flex flex-col justify-between transition-all duration-300 ${isRightAligned ? 'border-l' : 'border-r'}`;
+        containerStyle = `background: linear-gradient(${gradDir}, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%); border: none !important; box-shadow: none !important;`;
       } else {
         containerClass = `h-full max-w-[500px] ${padding} flex flex-col gap-8 shadow-2xl transition-all duration-300 ${quad.includes('right') ? 'border-l' : 'border-r'}`;
         containerStyle = `background-color: ${finalBgColor}; border-color: rgba(${colors.isDarkBg ? '255,255,255' : '15,23,42'}, 0.12); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);`;
@@ -880,11 +895,18 @@ export async function renderAdComposite({
       }
     }
 
-    // Testimonial block is NO LONGER hardcoded.
-    // The LLM Layout Director will generate a dynamicHtmlBlock with review content
-    // ONLY when the post's content intent is genuinely a customer review/testimonial.
-    // This prevents every post from getting a ★★★★★ editorial review overlay.
-    const testimonialHtml = '';
+    // Reactivate and dynamically compile the testimonial review block
+    let testimonialHtml = '';
+    const quoteElement = copyElements?.find(e => e.type === 'quote');
+    if (quoteElement) {
+      testimonialHtml = `
+        <div class="bubble-speech mt-4 p-5 flex flex-col gap-2 rounded-2xl shadow-md border" style="background-color: ${finalBgColor}; border-color: rgba(${colors.isDarkBg ? '255,255,255' : '15,23,42'}, 0.08); text-align: left !important; align-items: flex-start !important;">
+          <div style="display: flex; gap: 2.5px; color: ${finalAccentColor}; font-size: 1.15rem; line-height: 1;">★★★★★</div>
+          <p class="ad-body italic font-bold" style="color: ${finalTextColor}; font-size: 0.95rem; margin: 4px 0 0 0; line-height: 1.45; font-family: '${subtitleFont}', ${subtitleFallback};">"${quoteElement.text}"</p>
+          ${quoteElement.value ? `<p class="ad-badge" style="color: ${finalSubtitleColor}; font-size: 0.72rem; margin: 4px 0 0 0; opacity: 0.85; font-family: '${subtitleFont}', ${subtitleFallback};">— ${quoteElement.value}</p>` : ''}
+        </div>
+      `;
+    }
 
     // Watermark display word removed — it degraded visual quality by placing
     // ugly text behind the product subject without serving any design purpose.
@@ -963,10 +985,22 @@ export async function renderAdComposite({
           body {
             -webkit-font-smoothing: antialiased;
           }
+          :root {
+            --headline-color: ${finalTextColor};
+            --subtitle-color: ${finalSubtitleColor};
+            --accent-color: ${finalAccentColor};
+            --brand-color: ${finalBrandColor};
+            --cta-bg: ${btnBg};
+            --cta-text: ${btnText};
+            --card-bg: ${finalBgColor};
+            --card-border: rgba(${colors.isDarkBg ? '255,255,255' : '0,0,0'}, 0.08);
+          }
+          
           .glass-backplate {
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(${colors.isDarkBg ? '255,255,255' : '0,0,0'}, 0.08);
+            border: 1px solid var(--card-border);
+            background-color: var(--card-bg) !important;
           }
           svg.lucide {
             display: inline-block !important;
@@ -982,7 +1016,7 @@ export async function renderAdComposite({
             transform: rotate(-1.5deg);
           }
           .text-accent-color {
-            color: ${finalAccentColor} !important;
+            color: var(--accent-color) !important;
           }
           .font-headline-bold {
             text-transform: uppercase !important;
@@ -991,7 +1025,6 @@ export async function renderAdComposite({
           }
 
           /* ===== ELEGANT TYPOGRAPHIC SIZING (PREMIUM UPDATE) ===== */
-          /* Sensible defaults — inline styles from dynamicHtmlBlock will override these */
           .ad-headline {
             font-size: 42px;
             line-height: 1.15 !important;
@@ -1000,6 +1033,7 @@ export async function renderAdComposite({
             word-break: keep-all !important;
             overflow-wrap: normal !important;
             hyphens: none !important;
+            color: var(--headline-color) !important;
           }
           .ad-subtitle {
             font-size: 18px;
@@ -1009,6 +1043,7 @@ export async function renderAdComposite({
             word-break: keep-all !important;
             overflow-wrap: normal !important;
             hyphens: none !important;
+            color: var(--subtitle-color) !important;
           }
           .ad-body, .ad-feature {
             font-size: 15px;
@@ -1017,6 +1052,7 @@ export async function renderAdComposite({
             word-break: keep-all !important;
             overflow-wrap: normal !important;
             hyphens: none !important;
+            color: var(--subtitle-color) !important;
           }
           .ad-badge {
             font-size: 11px;
@@ -1027,6 +1063,7 @@ export async function renderAdComposite({
             word-break: keep-all !important;
             overflow-wrap: normal !important;
             hyphens: none !important;
+            color: var(--accent-color) !important;
           }
           .ad-cta {
             font-size: 13px;
@@ -1040,13 +1077,11 @@ export async function renderAdComposite({
             max-width: 100% !important;
             flex-shrink: 1 !important;
             align-self: flex-start !important;
+            background-color: var(--cta-bg) !important;
+            color: var(--cta-text) !important;
           }
 
           /* ===== BRAND COLOR UTILITIES ===== */
-          :root {
-            --brand-color: ${finalBrandColor};
-            --accent-color: ${finalAccentColor};
-          }
           .text-brand-color  { color: var(--brand-color) !important; }
           .text-brand-accent { color: var(--accent-color) !important; }
           .bg-brand-glass {
@@ -1067,15 +1102,47 @@ export async function renderAdComposite({
           .ad-col    { display: flex !important; flex-direction: column !important; gap: 8px !important; }
           .ad-grid-2 { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 16px !important; }
 
+          /* ===== ADVANCED VISUAL ARCHETYPE CLASSES ===== */
+          /* Brutalist Geometric block shadow cards */
+          .brutalist-card {
+            background: var(--card-bg) !important;
+            border: 3.5px solid var(--headline-color) !important;
+            box-shadow: 6px 6px 0px var(--headline-color) !important;
+            border-radius: 4px !important;
+          }
+          /* Cyberpunk tech glass styling */
+          .cyber-glow {
+            background: var(--card-bg) !important;
+            border: 1px solid var(--accent-color) !important;
+            box-shadow: 0 0 24px rgba(139, 92, 246, 0.15) !important;
+            border-radius: 16px !important;
+          }
+          /* Organic speech bubble review styling */
+          .bubble-speech {
+            background: var(--card-bg) !important;
+            border: 1px solid var(--card-border) !important;
+            border-radius: 20px 20px 0px 20px !important;
+            position: relative;
+          }
+          .bubble-speech::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 32px;
+            border-width: 10px 10px 0;
+            border-style: solid;
+            border-color: var(--card-bg) transparent;
+            display: block;
+            width: 0;
+          }
+
           /* ===== PREMIUM SCATTERED SCRIM & CONTRAST SHIELDS ===== */
-          /* High-end soft diffuse shadows that create absolute readability without harsh contours */
           .text-contrast-shield {
             text-shadow:
               0px 4px 18px rgba(0,0,0,0.65),
               0px 2px 8px rgba(0,0,0,0.45),
               0px 0px 30px rgba(0,0,0,0.35) !important;
           }
-          /* For dark text on light backgrounds */
           .text-contrast-shield-light {
             text-shadow:
               0px 4px 18px rgba(255,255,255,0.75),
@@ -1090,6 +1157,13 @@ export async function renderAdComposite({
         
         <!-- Z-Index 0: Background AI Scene (Base Image) -->
         <img src="data:image/png;base64,${baseImageBase64}" class="w-full h-full object-cover absolute top-0 left-0 z-0" style="${bgTransform}" />
+
+        <!-- Z-Index 5: Premium Editorial Readability Gradient Scrim -->
+        ${isLeftBleed ? `
+          <div style="position: absolute; top: 0; ${finalQuadrant.toLowerCase().includes('right') ? 'right: 0;' : 'left: 0;'} width: 55%; height: 100%; z-index: 5; pointer-events: none;
+                      background: linear-gradient(${finalQuadrant.toLowerCase().includes('right') ? 'to left' : 'to right'}, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%);">
+          </div>
+        ` : ''}
 
         <!-- Z-Index 10/30: Composite Overlay Grid Container (Typography Card) -->
         <div class="w-full h-full absolute top-0 left-0 ${zIndexClass}" style="overflow:hidden; ${bp.dynamicHtmlBlock ? '' : `${layoutType === 'editorial_column' ? '' : 'padding: 56px;'} display:flex; align-items:${verticalAlign.replace('items-','') || 'flex-start'}; justify-content:${horizontalAlign.replace('justify-','') || 'flex-start'};`}">
@@ -1141,7 +1215,7 @@ export async function renderAdComposite({
 
         <!-- Z-Index 40: Bottom Footer Trust Bar -->
         <div style="position: absolute; bottom: 0; left: 0; width: 100%; z-index: 40; pointer-events: none;
-                    background: linear-gradient(to right, ${finalBrandColor}ee, ${finalAccentColor}cc);
+                    background: rgba(15, 23, 42, 0.96); border-top: 1px solid rgba(255, 255, 255, 0.08);
                     display: flex; align-items: center; justify-content: space-between;
                     padding: 14px 32px; gap: 16px;">
           <!-- Trust badges: prefer CopyBlueprint badge elements, then bp.features, then generic fallback -->
@@ -1172,8 +1246,8 @@ export async function renderAdComposite({
           </div>
           <!-- CTA pill -->
           <div style="background: rgba(255,255,255,0.95); border-radius: 8px; padding: 8px 18px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-            <i data-lucide="phone" style="width: 13px; height: 13px; color: ${finalBrandColor};"></i>
-            <span style="font-size: 11px; font-weight: 800; color: ${finalBrandColor}; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'Plus Jakarta Sans', sans-serif; white-space: nowrap;">${cta}</span>
+            <i data-lucide="phone" style="width: 13px; height: 13px; color: ${btnBg && btnBg !== 'transparent' ? btnBg : '#0F172A'};"></i>
+            <span style="font-size: 11px; font-weight: 800; color: ${btnBg && btnBg !== 'transparent' ? btnBg : '#0F172A'}; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'Plus Jakarta Sans', sans-serif; white-space: nowrap;">${cta}</span>
           </div>
         </div>
 

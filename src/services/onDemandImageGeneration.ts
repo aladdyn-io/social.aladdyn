@@ -18,7 +18,7 @@ import { renderAdComposite } from './htmlRenderer';
 import { createLogger } from '../utils/logger';
 import { extractSubjectMask } from './subjectMasker';
 import { evaluateImageQuality } from './qualityEvaluator';
-import { generateLayoutBlueprint, determineGlassmorphism } from './layoutDirector';
+import { generateLayoutBlueprint, determineGlassmorphism, microTuneHtmlContrast } from './layoutDirector';
 import { callLlm } from '../utils/llmClient';
 import { generateAdCopyBlueprint } from './copyDirector';
 import { generateDetailedImagePrompt } from './generateImagePrompt';
@@ -196,14 +196,12 @@ export async function generatePostImage(
 
     logger.info(`Campaign branding context loaded. Logo: ${brandLogoUrl || 'None'}, Brand Name: ${brandName}`);
 
-    // PRE-PASS: Run Copy Director early so we can derive the HTML layout zone
-    // before generating the background image. This ensures the image leaves
-    // exactly the right region clear for the overlay.
-    logger.info('Running early Copy Director pass to inform image spatial requirements...');
-    let earlyNegativeSpaceZone: import('./generateImagePrompt').NegativeSpaceZone = 'left_column';
-    let earlyCopyBlueprint: import('../types/content').CopyBlueprint | undefined;
+    // PRE-PASS: Run Copy Director & Layout Director early so the HTML layout is planned first
+    // and strictly dictates the negative space zone for background image generation.
+    logger.info('Running early Copy Director pass to establish copywriting...');
+    let copyBlueprint: import('../types/content').CopyBlueprint | undefined;
     try {
-      earlyCopyBlueprint = await generateAdCopyBlueprint({
+      copyBlueprint = await generateAdCopyBlueprint({
         topic: post.topic || undefined,
         caption: post.caption || undefined,
         contentPillar: post.contentPillar || (post.metadata as any)?.contentPillar || undefined,
@@ -211,21 +209,92 @@ export async function generatePostImage(
         industry: campaign?.industry || 'Lifestyle',
         tone: campaign?.tone || campaign?.strategy?.tone || undefined
       });
+      logger.info(`✓ Early copy pass complete. Intent: ${copyBlueprint.intent}`);
+    } catch (e: any) {
+      logger.warn(`Early copy pass failed: ${e.message}`);
+    }
 
-      // Derive spatial zone from industry + copy intent
+    // Run Layout Director in Abstract Mode to plan design archetype and negative space zone first
+    logger.info('Running early Layout Director pass to design layout abstractly...');
+    let layoutBlueprint: any = undefined;
+    let plannedZone: import('./generateImagePrompt').NegativeSpaceZone = 'left_column';
+    try {
       const indLower = (campaign?.industry || '').toLowerCase();
       const isServiceOrB2B = indLower.includes('software') || indLower.includes('saas') || indLower.includes('service') || indLower.includes('learning') || indLower.includes('education') || indLower.includes('tech');
-      const intent = earlyCopyBlueprint.intent || '';
-      
-      // Educational/step-by-step posts → left column (numbered list needs left panel)
-      // Product highlight → left column (product on right)
-      // Testimonial/quote → left column (quote panel on left)
-      // Stats/comparison → left column (data panel on left)
-      earlyNegativeSpaceZone = 'left_column'; // default for all current archetypes
-      
-      logger.info(`✓ Early copy pass complete. Intent: ${intent}, Zone: ${earlyNegativeSpaceZone}`);
+      const abstractZone = isServiceOrB2B ? 'left_column' : 'left_column';
+
+      const overlayIsDarkBg = false;
+      const overlayHeadlineColor = campaign?.brandColor && campaign.brandColor !== '#FFFFFF' && campaign.brandColor !== '#ffffff'
+        ? campaign.brandColor
+        : '#0F172A';
+      const overlaySubtitleColor = '#334155';
+      const overlayAvgHex = '#F8F8F6';
+      const overlayAvgName = 'White Gradient Panel (HTML overlay)';
+
+      layoutBlueprint = await generateLayoutBlueprint({
+        imagePrompt: post.imagePrompt || post.topic || 'Premium brand background scene',
+        industry: campaign?.industry || 'Lifestyle',
+        services: campaign?.services || [],
+        baseColor: campaign?.brandColor || '#000000',
+        accentColor: campaign?.accentColor || undefined,
+        geography: campaign?.geography || undefined,
+        safestQuadrant: abstractZone,
+        contrastMetrics: {
+          isDarkBg: overlayIsDarkBg,
+          headlineColor: overlayHeadlineColor,
+          subtitleColor: overlaySubtitleColor,
+          averageColorHex: overlayAvgHex,
+          averageColorName: overlayAvgName
+        },
+        canvasDimensions: { width: 1080, height: 1080 },
+        slideIndex: undefined,
+        feedback: feedback,
+        copyBlueprint: copyBlueprint!
+      });
+
+      // Parse the negative space zone from Layout Blueprint
+      if (layoutBlueprint) {
+        // 1. Programmatic readability safety rule: If there are checklist items / features in copy, force editorial_left_bleed
+        const featureElements = copyBlueprint?.elements?.filter(e => e.type === 'feature' || e.type === 'statistic') || [];
+        const hasList = featureElements.length >= 2 || (layoutBlueprint.features && layoutBlueprint.features.length >= 2);
+        if (hasList) {
+          layoutBlueprint.layoutType = 'editorial_column';
+          layoutBlueprint.designArchetype = 'editorial_left_bleed';
+          layoutBlueprint.requireGlassmorphism = false;
+          logger.info('[LayoutOverride] Dense checklist/list detected. Programmatically enforced editorial_left_bleed (white gradient panel) layout style.');
+        }
+
+        // 2. Programmatic testimonial safety rule: If there is a customer review quote, force organic_minimalist archetype
+        const hasQuote = copyBlueprint?.elements?.some(e => e.type === 'quote') || (copyBlueprint && copyBlueprint.intent === 'trust');
+        if (hasQuote && !hasList) {
+          layoutBlueprint.designArchetype = 'organic_minimalist';
+          logger.info('[LayoutOverride] Customer testimonial/review quote detected. Programmatically enforced organic_minimalist review-focused layout style.');
+        }
+
+        const arch = (layoutBlueprint.designArchetype || '').toLowerCase();
+        const lType = (layoutBlueprint.layoutType || '').toLowerCase();
+        if (lType === 'editorial_column' || arch.includes('left_bleed') || arch.includes('left_panel')) {
+          plannedZone = 'left_column';
+        } else if (arch.includes('right_bleed') || arch.includes('right_panel')) {
+          plannedZone = 'right_column';
+        } else if (arch.includes('top_band') || arch.includes('top_panel')) {
+          plannedZone = 'top_band';
+        } else if (arch.includes('bottom_band') || arch.includes('bottom_panel')) {
+          plannedZone = 'bottom_band';
+        } else if (arch.includes('center') || arch.includes('clear')) {
+          plannedZone = 'center_clear';
+        } else {
+          // Check layoutBlueprint quadrant/safestQuadrant placement
+          const q = (layoutBlueprint.layoutType === 'classic' || layoutBlueprint.layoutType === 'feature_list') && layoutBlueprint.dynamicHtmlBlock
+            ? (layoutBlueprint.dynamicHtmlBlock.includes('right:') ? 'right_column' : 'left_column')
+            : 'left_column';
+          plannedZone = q as any;
+        }
+      }
+
+      logger.info(`✓ Layout Director abstract pass complete. Archetype: ${layoutBlueprint?.designArchetype}, Planned Zone: ${plannedZone}`);
     } catch (e: any) {
-      logger.warn(`Early copy pass failed, using default zone: ${e.message}`);
+      logger.warn(`Layout Director abstract pass failed, using fallback layout constraints: ${e.message}`);
     }
 
     // EXPLICIT SAY-SO INSTRUCTION FOR DYNAMIC IMAGE PROMPT RE-GENERATION:
@@ -236,7 +305,7 @@ export async function generatePostImage(
     try {
       const indLower = (campaign?.industry || '').toLowerCase();
       const isServiceOrB2B = indLower.includes('software') || indLower.includes('saas') || indLower.includes('service') || indLower.includes('learning') || indLower.includes('education') || indLower.includes('tech');
-      const preferredLayout = isServiceOrB2B ? 'editorial_left_bleed' : 'classic';
+      const preferredLayout = layoutBlueprint?.designArchetype || (isServiceOrB2B ? 'editorial_left_bleed' : 'classic');
 
       const normalizedInput = {
         industry: campaign?.industry || 'Lifestyle',
@@ -266,12 +335,18 @@ export async function generatePostImage(
         normalizedInput as any,
         feedback,
         preferredLayout,
-        // Use the zone derived from the early copy pass
-        earlyNegativeSpaceZone
+        plannedZone
       );
 
       logger.info(`✓ Successfully updated image prompt with HTML Renderer constraints: "${updatedPrompt.slice(0, 120)}..."`);
       post.imagePrompt = updatedPrompt;
+
+      // Persist the updated image prompt in the database so that layout constraints are saved permanently
+      await prisma.socialPost.update({
+        where: { id: postId },
+        data: { imagePrompt: updatedPrompt }
+      });
+      logger.info(`✓ Persisted layout-driven negative space prompt in the database successfully.`);
     } catch (e: any) {
       logger.error(`Dynamic image prompt re-generation failed, falling back to original prompt: ${e.message}`);
     }
@@ -288,12 +363,47 @@ export async function generatePostImage(
     };
     
     let qualityResult = await evaluateImageQuality(baseImageResult.imageBuffer, qualityParams);
-    if (!qualityResult.passed) {
-      logger.warn(`Quality Gate failed on first attempt: [${qualityResult.reasons.join(', ')}]. Re-rolling background generation once...`);
-      // Retry once
-      baseImageResult = await generateImageFromPrompt(post.imagePrompt);
-      qualityResult = await evaluateImageQuality(baseImageResult.imageBuffer, qualityParams);
-      logger.info(`Re-rolled Quality Gate outcome: passed=${qualityResult.passed}, score=${qualityResult.score.toFixed(2)}`);
+    
+    // Run Saliency Grid & Mask occupancy verification checks (CV Collision Gate)
+    let cvGatePassed = true;
+    let cvGateReason = '';
+    try {
+      const baseSaliency = await analyzeImageSaliency(baseImageResult.imageBuffer);
+      let zoneScore = 0;
+      if (plannedZone === 'left_column') {
+        zoneScore = ((baseSaliency.quadrantScores.top_left || 0) + 
+                     (baseSaliency.quadrantScores.middle_left || 0) + 
+                     (baseSaliency.quadrantScores.bottom_left || 0)) / 3;
+      } else if (plannedZone === 'right_column') {
+        zoneScore = ((baseSaliency.quadrantScores.top_right || 0) + 
+                     (baseSaliency.quadrantScores.middle_right || 0) + 
+                     (baseSaliency.quadrantScores.bottom_right || 0)) / 3;
+      } else if (plannedZone === 'top_band') {
+        zoneScore = ((baseSaliency.quadrantScores.top_left || 0) + 
+                     (baseSaliency.quadrantScores.top_center || 0) + 
+                     (baseSaliency.quadrantScores.top_right || 0)) / 3;
+      } else if (plannedZone === 'bottom_band') {
+        zoneScore = ((baseSaliency.quadrantScores.bottom_left || 0) + 
+                     (baseSaliency.quadrantScores.bottom_center || 0) + 
+                     (baseSaliency.quadrantScores.bottom_right || 0)) / 3;
+      } else if (plannedZone === 'center_clear') {
+        zoneScore = baseSaliency.quadrantScores.center || 0;
+      }
+      
+      logger.info(`CV Gate Saliency Verification: Planned Zone '${plannedZone}' score is ${zoneScore.toFixed(3)}`);
+      if (zoneScore > 0.32) {
+        cvGatePassed = false;
+        cvGateReason = `Saliency in planned negative space zone '${plannedZone}' is too high (${zoneScore.toFixed(3)} > 0.32)`;
+      }
+    } catch (e: any) {
+      logger.warn(`Saliency CV verification failed: ${e.message}`);
+    }
+
+    if (!qualityResult.passed || !cvGatePassed) {
+      const reasonStr = !qualityResult.passed 
+        ? `Quality Gate failed: [${qualityResult.reasons.join(', ')}]`
+        : `CV Collision Gate failed: ${cvGateReason}`;
+      logger.warn(`${reasonStr}. (Re-rolls are disabled to prevent token wastage, continuing to composite safely using micro-contrast shields.)`);
     }
 
     let finalAdCreativeResult: ImageGenerationResult;
@@ -312,139 +422,41 @@ export async function generatePostImage(
       // STEP 3: Pure Node Subject Extraction Masking
       let subjectMaskUrl: string | undefined = undefined;
       let maskBuffer: Buffer | undefined = undefined;
-      try {
-        maskBuffer = await extractSubjectMask(baseImageResult.imageBuffer);
+      // 3D Depth Sandwiching is disabled entirely globally to protect visual layouts from glitched overlays.
+      logger.info('3D Depth Sandwiching is disabled. Skipping subject mask cutout extraction.');
+
+      // STEP 4: Relative luminance localized color contrast solve for planned zone
+      const chosenQuadrant = plannedZone === 'left_column' ? 'top_left' : 
+                             plannedZone === 'right_column' ? 'top_right' :
+                             plannedZone === 'top_band' ? 'top_center' :
+                             plannedZone === 'bottom_band' ? 'bottom_center' :
+                             'center';
+      logger.info(`Sampling local color contrast for planned chosen quadrant: ${chosenQuadrant}`);
+      const finalColorMetrics = await analyzeLocalColors(baseImageResult.imageBuffer, chosenQuadrant, 8);
+
+      // STEP 5: Micro-Contrast Tuning Pass on pre-planned HTML overlay
+      if (layoutBlueprint && layoutBlueprint.dynamicHtmlBlock) {
+        logger.info('Running Micro-Contrast Tuning Pass on pre-planned HTML overlay...');
+        const overlayIsDarkBg = finalColorMetrics.isDarkBg;
+        const overlayHeadlineColor = campaign?.brandColor && campaign.brandColor !== '#FFFFFF' && campaign.brandColor !== '#ffffff'
+          ? campaign.brandColor
+          : (overlayIsDarkBg ? '#FFFFFF' : '#0F172A');
+        const overlaySubtitleColor = overlayIsDarkBg ? '#E2E8F0' : '#334155';
+        const overlayAccentColor = layoutBlueprint?.accentColorOverride || campaign?.accentColor || undefined;
         
-        logger.info('Uploading transparent subject mask cutout to storage...');
-        const maskUploadResult = {
-          imageBuffer: maskBuffer,
-          metadata: {
-            model: 'ONNX Subject Extractor',
-            dimensions: { width: 1080, height: 1080 },
-            prompt: 'transparent subject mask'
-          }
-        };
-        subjectMaskUrl = await uploadImageToStorage(maskUploadResult, `posts/${postId}/mask/`);
-        logger.info(`✓ Subject mask uploaded successfully. URL: ${subjectMaskUrl}`);
-      } catch (maskErr: any) {
-        logger.error(`Subject mask extraction or upload skipped/failed: ${maskErr.message}. Gracefully degrading to standard 2D compositing.`);
-      }
-
-      // STEP 4: Deterministic Saliency Grid Occupancy check with Subject Collision Avoidance
-      logger.info('Executing saliency grid layout reasoning...');
-      const baseSaliency = await analyzeImageSaliency(baseImageResult.imageBuffer);
-      let safestQuadrant = baseSaliency.safestQuadrant;
-
-      if (maskBuffer) {
-        try {
-          logger.info('Analyzing subject cutout mask saliency to prevent text-subject collision...');
-          const maskSaliency = await analyzeImageSaliency(maskBuffer);
-          
-          let minScore = Infinity;
-          let bestQuad = safestQuadrant;
-          const finalQuadrantScores: Record<string, number> = {};
-
-          for (const quad of Object.keys(baseSaliency.quadrantScores)) {
-            const baseScore = baseSaliency.quadrantScores[quad] || 0;
-            const maskScore = maskSaliency.quadrantScores[quad] || 0;
-
-            // If a quadrant has more than 1.5% solid subject cutout coverage, penalize it heavily.
-            // This prevents placing text overlays directly over the main subject product/furniture.
-            const penalty = maskScore > 0.015 ? 10.0 + maskScore * 5.0 : 0.0;
-
-            // Apply spatial bias to prefer top/center zones for product layouts
-            let biasPenalty = 0.0;
-            if (quad.startsWith('bottom')) {
-              biasPenalty = 0.35;
-            } else if (quad === 'center') {
-              biasPenalty = 0.05;
-            }
-
-            const combinedScore = baseScore + penalty + biasPenalty;
-            finalQuadrantScores[quad] = combinedScore;
-
-            logger.info(`Quadrant '${quad}' -> Base: ${baseScore.toFixed(3)}, Subject Occupancy: ${(maskScore * 100).toFixed(1)}%, Penalty: ${penalty.toFixed(3)}, Bias: ${biasPenalty.toFixed(2)}, Combined: ${combinedScore.toFixed(3)}`);
-
-            if (combinedScore < minScore) {
-              minScore = combinedScore;
-              bestQuad = quad as any;
-            }
-          }
-
-          safestQuadrant = bestQuad;
-          // Store final scores for the LLM to use
-          (baseSaliency as any).finalQuadrantScores = finalQuadrantScores;
-          logger.info(`✓ Saliency collision-resolver solved safest quadrant: '${safestQuadrant}' (Score: ${minScore.toFixed(3)})`);
-        } catch (maskSalErr: any) {
-          logger.error(`Subject mask saliency analysis failed: ${maskSalErr.message}. Falling back to visual-only saliency.`);
-        }
-      }
-
-      // STEP 5: Relative luminance localized color contrast solve (preliminary pass for safest quadrant)
-      logger.info(`Running color sampling for safe zone: ${safestQuadrant}`);
-      const colorMetrics = await analyzeLocalColors(baseImageResult.imageBuffer, safestQuadrant, 8);
-
-      // STEP 5.4: Copy Director Pass — reuse early blueprint if available, otherwise re-run
-      logger.info('Using Copy Director blueprint for layout pass...');
-      const copyBlueprint = earlyCopyBlueprint || await generateAdCopyBlueprint({
-        topic: post.topic || undefined,
-        caption: post.caption || undefined,
-        contentPillar: post.contentPillar || (post.metadata as any)?.contentPillar || undefined,
-        brandName: brandName,
-        industry: campaign?.industry || 'Lifestyle',
-        tone: campaign?.tone || campaign?.strategy?.tone || undefined
-      });
-
-      // STEP 5.5: Double-pass Layout Director pass (LLM layout solver)
-      // IMPORTANT: The dynamicHtmlBlock always renders a white-to-transparent gradient panel
-      // on the left side. The actual surface color the text sits on is near-white, NOT the
-      // raw background image pixels. Override contrastMetrics to reflect the HTML overlay
-      // surface so the LLM always picks dark text (never white-on-white).
-      const overlayIsDarkBg = false; // white gradient panel = light surface = dark text required
-      const overlayHeadlineColor = campaign?.brandColor && campaign.brandColor !== '#FFFFFF' && campaign.brandColor !== '#ffffff'
-        ? campaign.brandColor  // use brand color if it's dark enough
-        : '#0F172A';           // fallback to near-black
-      const overlaySubtitleColor = '#334155';
-      const overlayAvgHex = '#F8F8F6'; // near-white (the gradient panel surface)
-      const overlayAvgName = 'White Gradient Panel (HTML overlay)';
-
-      let layoutBlueprint = undefined;
-      try {
-        layoutBlueprint = await generateLayoutBlueprint({
-          imagePrompt: post.imagePrompt,
-          industry: campaign?.industry || 'Lifestyle',
-          services: campaign?.services || [],
-          baseColor: campaign?.brandColor || '#000000',
-          accentColor: campaign?.accentColor || undefined,
-          geography: campaign?.geography || undefined,
-          safestQuadrant,
-          quadrantScores: (baseSaliency as any).finalQuadrantScores || baseSaliency.quadrantScores,
-          contrastMetrics: {
-            // Use overlay surface metrics, not raw background pixel metrics
+        layoutBlueprint.dynamicHtmlBlock = microTuneHtmlContrast(
+          layoutBlueprint.dynamicHtmlBlock,
+          {
             isDarkBg: overlayIsDarkBg,
             headlineColor: overlayHeadlineColor,
             subtitleColor: overlaySubtitleColor,
-            averageColorHex: overlayAvgHex,
-            averageColorName: overlayAvgName,
-            // Still pass detailed region data from the actual image for reference
-            detailedRegions: (colorMetrics as any).detailedRegions
+            averageColorHex: finalColorMetrics.averageColorHex || '#000000',
+            accentColor: overlayAccentColor
           },
-          canvasDimensions: { 
-            width: baseImageResult.metadata?.dimensions?.width || 1080, 
-            height: baseImageResult.metadata?.dimensions?.height || 1080 
-          },
-          slideIndex: undefined,
-          feedback: feedback,
-          copyBlueprint: copyBlueprint
-        });
-      } catch (bpErr: any) {
-        logger.error(`Layout Director execution skipped/failed: ${bpErr.message}. Proceeding with standard layout variables.`);
+          layoutBlueprint.requireGlassmorphism || false,
+          layoutBlueprint.layoutType || 'classic'
+        );
       }
-
-      // STEP 5.6: Double-pass contrast-safe colors resampling & Z-Index depth analysis
-      const chosenQuadrant = safestQuadrant; // Strictly lock placement to the consistent CV engine's solved safest zone
-      logger.info(`Resampling local color contrast for final chosen quadrant: ${chosenQuadrant}`);
-      const finalColorMetrics = await analyzeLocalColors(baseImageResult.imageBuffer, chosenQuadrant, 8);
 
       // Calculate the cutout occupancy of the final chosen text overlay quadrant
       let cutoutOverlap = 0;
@@ -461,28 +473,10 @@ export async function generatePostImage(
       // Determine final typography Z-Index programmatically to avoid sliced/clipped text
       let typographyZIndex: 'behind' | 'in_front' = 'in_front'; // Safe default
       if (layoutBlueprint) {
-        // Enforce safe sandwiching stacking: only stack 'behind' the subject cutout if:
-        // 1. The LLM Layout Director suggested 'behind' AND
-        // 2. The subject overlap is reasonable (between 1% and 25%) to preserve complete legibility
-        //    without fully drowning the text, allowing the letters to wrap around the subject.
-        // 3. For card-based layouts, keeping them behind looks blocky and cuts through the subject artificially,
-        //    so we restrict the Z-depth sandwich primarily to borderless floating designs (requireGlassmorphism === false)
-        //    or highly translucent cards (opacity < 0.4).
-        
-        const isBorderless = layoutBlueprint.requireGlassmorphism === false;
-        const isTranslucentCard = layoutBlueprint.requireGlassmorphism === true && (!layoutBlueprint.backgroundColorOverride || layoutBlueprint.backgroundColorOverride.includes('0.'));
-        
-        const isEligibleForDepth = isBorderless || isTranslucentCard;
-        const hasReasonableOverlap = cutoutOverlap >= 0.001 && cutoutOverlap <= 0.35;
-
-        if (layoutBlueprint.typographyZIndex === 'behind' && isEligibleForDepth && hasReasonableOverlap) {
-          typographyZIndex = 'behind';
-          logger.info(`3D Depth Sandwiching APPROVED: Typography will render BEHIND subject (overlap: ${(cutoutOverlap * 100).toFixed(1)}%)`);
-        } else {
-          typographyZIndex = 'in_front';
-          logger.info(`3D Depth Sandwiching DEACTIVATED: Typography forced IN FRONT of subject to protect legibility/framing (overlap: ${(cutoutOverlap * 100).toFixed(1)}%, borderless: ${isBorderless}, translucentCard: ${isTranslucentCard})`);
-        }
-        layoutBlueprint.typographyZIndex = typographyZIndex;
+        // 3D Depth Sandwiching is disabled entirely globally, so typography is always in front.
+        typographyZIndex = 'in_front';
+        layoutBlueprint.typographyZIndex = 'in_front';
+        logger.info('3D Depth Sandwiching is disabled. Typography forced IN FRONT of subject.');
       }
 
       // Apply the definitive glassmorphism decider using resampled final color metrics
@@ -550,23 +544,9 @@ export async function generatePostImage(
           const slideImageResult = await generateImageFromPrompt(slidePrompts[slideIdx]);
 
           // B. Subject mask cutout extraction
-          logger.info(`[Carousel] Isolating transparent subject cutout mask...`);
           let slideMaskUrl = '';
-          try {
-            const maskBuffer = await extractSubjectMask(slideImageResult.imageBuffer);
-            const maskUploadResult = {
-              imageBuffer: maskBuffer,
-              metadata: {
-                model: `rembg-wasm`,
-                dimensions: { width: adWidth, height: adHeight },
-                prompt: slidePrompts[slideIdx]
-              }
-            };
-            slideMaskUrl = await uploadImageToStorage(maskUploadResult, `posts/${postId}/slide_${slideIdx}_mask/`);
-            logger.info(`[Carousel] Subject mask uploaded successfully: ${slideMaskUrl}`);
-          } catch (maskErr) {
-            logger.warn(`[Carousel] Mask extraction skipped: ${maskErr}`);
-          }
+          // 3D Depth Sandwiching is disabled entirely globally for carousels.
+          logger.info('[Carousel] 3D Depth Sandwiching is disabled. Skipping subject mask cutout extraction.');
 
           // C. Image saliency overlay detection
           logger.info(`[Carousel] Analyzing spatial grid saliency layout...`);
@@ -684,7 +664,7 @@ export async function generatePostImage(
           headline: copyBlueprint?.primaryHeadline || headline,
           subtitle: copyBlueprint?.secondarySubtitle || '',
           cta: (() => {
-            const ctaEl = copyBlueprint?.elements?.find(e => e.type === 'cta');
+            const ctaEl = copyBlueprint?.elements?.find((e: any) => e.type === 'cta');
             if (!ctaEl) return cta;
             const iconHtml = ctaEl.iconName ? `<i data-lucide="${ctaEl.iconName}" style="width: 16px; height: 16px; margin-right: 2px;"></i>` : '';
             return `${iconHtml} ${ctaEl.text}`.trim();

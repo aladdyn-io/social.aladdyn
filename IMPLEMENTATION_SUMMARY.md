@@ -97,6 +97,23 @@ Successfully implemented a new architecture where content generation creates **d
   - Implemented premium pill-shaped CTA buttons (`rounded-full`) with leading white circular arrow indicators (`→`).
   - Aligned LLM Layout Director prompts to dynamically select layout archetypes, cursive keywords spans, solid/double-ring checklist items, and circular arrow CTA structures.
 
+### 8. **Restored Testimonial Cards & Contrast-Safe Charcoal Footers (V2.5)** ✅
+
+- **Files**: `src/services/copyDirector.ts`, `src/services/htmlRenderer.ts`
+- **Changes**:
+  - Segregated copywriting richness parameters by intent in the Copy Director, preventing checklist feature dilution on `TESTIMONIAL` posts and ensuring the quote is always present.
+  - Implemented dynamic speech-bubble review cards (`.bubble-speech` reviews) with rating stars (`★★★★★`) in the compositor template and Layout Director HTML generator.
+  - Upgraded the bottom footer bar to a high-contrast charcoal slate (`rgba(15, 23, 42, 0.96)`) and injected `btnBg` colors dynamically inside the button's labels, eliminating white-on-white text washouts.
+
+### 9. **Sofa-Prohibiting Splits, 3D Sandwich Bypass & Dynamic Accent Colors (V2.5)** ✅
+
+- **Files**: `src/services/generateImagePrompt.ts`, `src/services/onDemandImageGeneration.ts`, `src/services/layoutDirector.ts`
+- **Changes**:
+  - Injected an aggressive **No Wide Furniture Rule** (forbidding multi-seat sofas/couches/beds) and **Strict Human Edge-Placement** rules in `generateImagePrompt.ts` to defeat Flux's centering bias.
+  - Saved layout-driven negative space visual prompts permanently back to the PostgreSQL database via Prisma updates on generation.
+  - Disabled the ONNX subject cutout mask layer entirely across standard and carousel pipelines to prevent floating visual artifacts, locking `typographyZIndex` to `'in_front'` globally.
+  - Refactored `microTuneHtmlContrast` to accept a dynamic `accentColor` parameter and propagate the layout's custom accent color override or campaign brand accent color, completely eliminating hardcoded purple accents.
+
 ---
 
 ## 📦 Files Created
@@ -121,10 +138,13 @@ Successfully implemented a new architecture where content generation creates **d
 1. `src/types/content.ts`
 2. `src/services/generatePosts.ts`
 3. `src/services/layoutDirector.ts`
-4. `src/db/database.ts`
-5. `src/server.ts`
-6. `src/test-database.ts`
-7. `.env` (OpenRouter configuration added)
+4. `src/services/copyDirector.ts`          # ✅ Updated in V2.5
+5. `src/services/generateImagePrompt.ts`    # ✅ Updated in V2.5
+6. `src/services/onDemandImageGeneration.ts` # ✅ Updated in V2.5
+7. `src/db/database.ts`
+8. `src/server.ts`
+9. `src/test-database.ts`
+10. `.env` (OpenRouter configuration added)
 
 ---
 
