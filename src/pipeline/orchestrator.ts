@@ -211,6 +211,7 @@ export class CampaignPipelineOrchestrator {
           ...inputs,
           industry: inputs.industry || genieOutput?.industry || 'General Business',
           geography: inputs.geography || genieOutput?.geography || 'India',
+          services: (inputs.services?.length ?? 0) > 0 ? inputs.services : ['Our Services'],
         };
         return normalizeInput(enrichedInput);
       }

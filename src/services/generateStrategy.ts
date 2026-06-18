@@ -65,7 +65,6 @@ const buildFallbackStrategy = (input: NormalizedInput): Strategy => {
       : undefined,
   };
 };
-const logger = createLogger({ service: 'strategy-agent-sequence' });
 
 /**
  * Legacy Sequential Wrapper

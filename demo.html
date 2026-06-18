@@ -453,7 +453,7 @@
         </div>
 
         <!-- ── ROW 2: Stat bar ── -->
-        <div class="panel flex flex-wrap items-center divide-x" style="divide-color: var(--border-subtle);">
+        <div class="panel flex flex-wrap items-center divide-x divide-[var(--border-subtle)]">
           <div class="flex items-center gap-3 px-5 py-4 flex-1 min-w-0">
             <span id="stat-total" class="text-2xl font-bold" style="color:var(--ink-1)">—</span>
             <span class="text-sm font-medium" style="color:var(--ink-2)">total posts</span>
@@ -825,8 +825,17 @@
       </div>
       <!-- CTA -->
       <div id="post-modal-cta-wrap" class="hidden">
-        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Call to Action</div>
-        <p id="post-modal-cta" class="text-sm text-emerald-400 font-semibold"></p>
+        <div class="text-xs font-semibold mb-1" style="color:var(--ink-2)">Call to action</div>
+        <p id="post-modal-cta" class="text-sm font-medium" style="color:var(--success)"></p>
+      </div>
+
+      <!-- Image / Video Prompt -->
+      <div id="post-modal-prompt-wrap" class="hidden">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold" style="color:var(--ink-2)">AI generation prompt</span>
+          <span id="post-modal-prompt-type" class="text-xs font-medium px-2 py-0.5 rounded-md" style="background:var(--surface-3);color:var(--ink-3);border:1px solid var(--border)">image</span>
+        </div>
+        <pre id="post-modal-prompt" class="text-xs leading-relaxed p-3 rounded-lg overflow-x-auto scrollbar" style="background:var(--surface-2);color:var(--ink-2);border:1px solid var(--border);white-space:pre-wrap;word-break:break-word;max-height:160px;overflow-y:auto"></pre>
       </div>
     </div>
     <!-- Actions footer -->
@@ -1237,8 +1246,6 @@ function updateCampaignSummary(camp) {
         </div>
       `;
     }).join('');
-      `;
-    }).join('');
 
     // Tone
     document.getElementById('strategy-tone').textContent = camp.strategy.tone || camp.tone || '—';
@@ -1249,7 +1256,10 @@ function updateCampaignSummary(camp) {
       const plats = camp.platforms || [];
       platEl.innerHTML = plats.map(p => {
         const isIG = p === 'instagram';
-        return `<span class="text-[9px] font-bold uppercase px-2 py-1 rounded-full border ${isIG ? 'bg-pink-500/10 text-pink-400 border-pink-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}">${isIG ? '📸 IG' : '💼 LN'}</span>`;
+        const style = isIG
+          ? `background:oklch(0.65 0.18 345 / 0.12);color:oklch(0.72 0.18 345);border-color:oklch(0.65 0.18 345 / 0.3)`
+          : `background:var(--info-dim);color:var(--info);border-color:oklch(0.65 0.14 230 / 0.3)`;
+        return `<span class="text-xs font-medium px-2 py-1 rounded-md border" style="${style}">${isIG ? 'Instagram' : 'LinkedIn'}</span>`;
       }).join('');
     }
 
@@ -1758,6 +1768,18 @@ function openPostModal(postId) {
     document.getElementById('post-modal-cta').textContent = post.callToAction;
   } else {
     ctaWrap.classList.add('hidden');
+  }
+
+  // Prompt (image or video)
+  const promptWrap = document.getElementById('post-modal-prompt-wrap');
+  const prompt = post.videoPrompt || post.imagePrompt;
+  if (prompt) {
+    promptWrap.classList.remove('hidden');
+    document.getElementById('post-modal-prompt').textContent = prompt;
+    const typeEl = document.getElementById('post-modal-prompt-type');
+    typeEl.textContent = post.videoPrompt ? 'video prompt' : 'image prompt';
+  } else {
+    promptWrap.classList.add('hidden');
   }
 
   // Actions

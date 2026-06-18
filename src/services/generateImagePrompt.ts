@@ -8,6 +8,7 @@ import { CalendarItem, Strategy } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { callLlm } from '../utils/llmClient';
 import { getFriendlyColorName, getGeographyVisualCues } from './audienceClassifier';
+
 const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
 const isOpenAiDisabled =
   process.env.OPENAI_DISABLED === 'true' ||
@@ -30,33 +31,9 @@ export type NegativeSpaceZone =
   | 'top_band'
   | 'bottom_band'
   | 'center_clear';
-=======
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
-const isOpenAiDisabled =
-  process.env.OPENAI_DISABLED === 'true' ||
-  process.env.AI_DISABLED === 'true' ||
-  !hasOpenAiKey;
-
-const isQuotaError = (error: unknown): boolean => {
-  const err = error as {
-    code?: string;
-    status?: number;
-    message?: string;
-    error?: { code?: string };
-  };
-  return (
-    err?.code === 'insufficient_quota' ||
-    err?.error?.code === 'insufficient_quota' ||
-    (err?.status === 429 &&
-      typeof err?.message === 'string' &&
-      err.message.includes('insufficient_quota'))
-  );
-};
->>>>>>> 22abb9d (cation update)
 
 export async function generateDetailedImagePrompt(
-  calendarItem: CalendarItem,
+  item: CalendarItem,
   strategy: Strategy,
   normalized: NormalizedInput,
   feedback?: string,
@@ -64,26 +41,16 @@ export async function generateDetailedImagePrompt(
   negativeSpaceZone?: NegativeSpaceZone
 ): Promise<string> {
   if (isOpenAiDisabled) {
-    return generateFallbackPrompt(calendarItem, normalized);
+    return generateFallbackPrompt(item, normalized);
   }
 
-  try {
-    const prompt = await callOpenAI(calendarItem, strategy, normalized, feedback, preferredLayout, negativeSpaceZone);
-    if (prompt.length < 100) throw new Error('Generated prompt too short');
-    console.log(`[ImagePrompt] Generated ${prompt.length} char prompt for: ${calendarItem.topic}`);
-    return prompt;
-  } catch (error: any) {
-    console.error(`[ImagePrompt] Prompt generation failed: ${error.message}. Returning fallback.`);
-    return generateFallbackPrompt(calendarItem, normalized);
-=======
-  if (isOpenAiDisabled) {
-    return generateFallbackPrompt(calendarItem, normalized);
-  }
+  const topicLower = (item.topic || '').toLowerCase();
+  const indLower = (normalized.industry || '').toLowerCase();
+  const baseColorDesc = getFriendlyColorName(normalized.base_color);
+  const accentColorDesc = getFriendlyColorName(normalized.accent_color);
+  const geoVisualCues = getGeographyVisualCues(normalized.geography);
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const prompt = await callOpenAI(calendarItem, strategy, normalized);
-      if (prompt.length < 100) throw new Error('Generated prompt too short');
+  const productKeywords = ['product', 'shop', 'store', 'e-commerce', 'retail', 'brand', 'packaging', 'bottle', 'jar', 'box', 'cream', 'cosmetic', 'serum', 'oil', 'shampoo', 'soap', 'perfume', 'supplement', 'food', 'beverage', 'drink', 'snack', 'coffee', 'tea', 'juice', 'clothing', 'apparel', 'fashion', 'jewelry', 'accessory', 'shoe', 'bag', 'watch', 'gadget', 'device', 'phone', 'laptop', 'furniture', 'decor', 'candle', 'plant', 'flower', 'gift', 'toy', 'pet'];
   const isPhysicalBrand = productKeywords.some(kw => indLower.includes(kw));
   
   // If it is a physical brand but the topic is community, trust, lifestyle, thank you, review, or unlock potential, we still want a human lifestyle shot!
@@ -146,34 +113,23 @@ export async function generateDetailedImagePrompt(
 
   const layoutInstructions = `- EXPLICIT HTML COMPOSITOR REQUIREMENT: ${zoneCompositorNote[effectiveZone]}`;
 
-  let splitFramingMandate = '';
-  if (effectiveZone === 'left_column') {
-    splitFramingMandate = `Framed with a strict asymmetric 50/50 vertical split-screen. The entire LEFT 50% of the canvas MUST be a completely empty, blank, flat, and bare solid background (like a clean empty studio wall) with absolute zero props, zero plants, zero furniture, zero couches, zero decorations, and zero human subjects. ALL active scene elements, real people, sofas, armchairs, tables, products, plants, and background details are positioned strictly on the RIGHT 50% of the frame. Any human subjects must be seated or standing entirely within the right 50% area. Asymmetric composition is critical.`;
-  } else if (effectiveZone === 'right_column') {
-    splitFramingMandate = `Framed with a strict asymmetric 50/50 vertical split-screen. The entire RIGHT 50% of the canvas MUST be a completely empty, blank, flat, and bare solid background (like a clean empty studio wall) with absolute zero props, zero plants, zero furniture, zero couches, zero decorations, and zero human subjects. ALL active scene elements, real people, sofas, armchairs, tables, products, plants, and background details are positioned strictly on the LEFT 50% of the frame. Any human subjects must be seated or standing entirely within the left 50% area. Asymmetric composition is critical.`;
-  } else if (effectiveZone === 'top_band') {
-    splitFramingMandate = `Framed with an absolute split. The top 40% of the canvas MUST be a completely bare, solid flat background with absolute zero props, details, or objects. The main subject product or lifestyle element is positioned strictly in the dead center of the bottom 60%. Asymmetric composition is critical.`;
-  } else if (effectiveZone === 'bottom_band') {
-    splitFramingMandate = `Framed with an absolute split. The bottom 40% of the canvas MUST be a completely bare, solid flat background with absolute zero props, details, or objects. The main subject product or lifestyle element is positioned strictly in the dead center of the top 60%. Asymmetric composition is critical.`;
-  } else if (effectiveZone === 'center_clear') {
-    splitFramingMandate = `Framed with a symmetric split. The center 33% of the canvas MUST be a completely bare, empty background with absolute zero props, details, or objects. The main subject products or lifestyle elements are positioned strictly on the outer edges (left and right thirds). Asymmetric/symmetric balance is critical.`;
-  }
-
   let visualDirectionStr = '';
   if (needLifestyle) {
     visualDirectionStr = `VISUAL DIRECTION: HIGH-END LIFESTYLE PHOTOGRAPHY (Human-centric)
 - The image MUST be a premium, high-quality, photorealistic photograph featuring real people.
 - Main subject: ${ethnicity} people representing the target audience (e.g. students studying, young professionals collaborating, a customer using the service/product, or a smiling person at a desk) matching the post topic: "${item.topic}".
 - SPATIAL SPLIT MANDATE (CRITICAL FOR TEXT OVERLAY): All human subjects, laptops, props, furniture, plants, windows, and detailed active elements MUST be placed strictly on the ${zoneMandate.subjectSide} of the frame.
-- NO SOFA / NO WIDE FURNITURE RULE: For split compositions (left_column or right_column), NEVER generate wide furniture like multi-seater sofas, wide couches, dining tables, or beds, as they naturally stretch across the center line and bleed into the empty zone. Instead, ONLY generate compact, single-seat furniture like a single cozy armchair, a small stool, or a single designer chair positioned strictly within the ${zoneMandate.subjectSide}.
-- STRICT HUMAN EDGE-PLACEMENT: The human subject MUST be seated or standing entirely within the outer 40% of the ${zoneMandate.subjectSide} (e.g. if LEFT 50% is empty, the human must be strictly on the far right edge of the frame, between 60% and 100% of the width).
-- NO CENTRAL BLEED RULE: No elements, limbs, arms, cushions, or background details are allowed to bleed or stretch across the center line of the frame.
 - NEGATIVE SPACE MANDATE (ABS-PROPRIETARY): The entire ${zoneMandate.emptyZone} of the frame MUST be completely blank, empty, clean, flat, uncluttered, and neutral negative space (e.g., ${zoneMandate.emptyDesc} in the brand base color: ${baseColorDesc}). There must be absolutely no furniture, no lamps, no TV, no windows, no plants, and no decorations in the ${zoneMandate.emptyZone} of the image. The composition must transition from a clean, blank empty surface in the ${zoneMandate.emptyZone} to active subjects in the ${zoneMandate.subjectSide}.`;
   } else {
     visualDirectionStr = `VISUAL DIRECTION: PREMIUM STAGED PRODUCT SHOWCASE (Product-centric)
 - The image MUST be a professional product showcase with premium staged product packaging or containers on an elegant minimalist surface or pedestal.
 - SPATIAL SPLIT MANDATE (CRITICAL FOR TEXT OVERLAY): The product pedestal, packaging, staging elements, plants, and background details MUST be positioned strictly on the ${zoneMandate.subjectSide} of the frame.
 - NEGATIVE SPACE MANDATE (ABS-PROPRIETARY): The entire ${zoneMandate.emptyZone} of the frame MUST be completely blank, flat, uncluttered, neutral, and empty negative space (e.g. ${zoneMandate.emptyDesc} in the brand base color: ${baseColorDesc}). There must be absolutely no detailed props, shadows, panels, or items in the ${zoneMandate.emptyZone} of the image.`;
+  }
+
+  let feedbackSection = '';
+  if (feedback) {
+    feedbackSection = `\nUSER FEEDBACK / DIRECTIONS (You MUST follow these specific instructions and modify/refine the visual prompt according to them):\n"${feedback}"\n`;
   }
 
   const userPrompt = `Create a detailed visual prompt for an AI image generator (like FLUX or DALL-E) to produce a text-free social media background scene.
@@ -200,14 +156,13 @@ Is Festival: ${item.is_festival}${item.is_festival ? ' (' + item.festival_name +
 Tone: ${strategy.tone}
 ${feedbackSection}
 
-Generate a strict, highly focused visual prompt (120-220 words) that MUST start IMMEDIATELY with the spatial split composition rule in its very first sentence.
-
-CRITICAL FORMATTING REQUIREMENT (YOU MUST START WITH THIS EXACT STRUCTURE):
-"Composition: Asymmetric split-screen composition. The ${zoneMandate.emptyZone} of the canvas MUST be a completely empty, blank, flat, and bare negative space (${zoneMandate.emptyDesc}) with absolute zero props, zero plants, zero shadows, and zero details. The main subject product packaging or human lifestyle elements are positioned strictly on the ${zoneMandate.subjectSide} of the frame. ${splitFramingMandate}
-Scene Details: [Describe the high-end scene setup and products/lifestyle subjects, explicitly stating that all described objects are positioned strictly within the ${zoneMandate.subjectSide} of the frame, leaving the ${zoneMandate.emptyZone} entirely empty as a bare, clean plaster wall with absolutely no details, props, plants, or shadows. Incorporate geographical staging elements: ${geoVisualCues}]
-Lighting & Color: [Describe the lighting, keeping the light soft and diffused, and ensuring the brand base color (${baseColorDesc}) and accent color (${accentColorDesc}) are used strictly as localized highlights in the ${zoneMandate.subjectSide} area, while the ${zoneMandate.emptyZone} remains a soft, neutral plaster shade]"
-
-Do NOT write a single continuous paragraph that mixes empty zones and visual props. You MUST strictly divide the output prompt into "Composition", "Scene Details", and "Lighting & Color" sections as shown above and explicitly weave the spatial layout constraints into ALL three sections to reinforce the 50/50 split and prevent the AI generator from centering subjects! This is crucial so that the AI image generator (Flux) receives the absolute empty space mandate first and leaves the required zone completely clear for the HTML text!
+Generate a comprehensive visual prompt (150-300 words) covering:
+1. Main Visual Concept & Subject: Describe the main scene (lifestyle of people or staged product showcase based on the VISUAL DIRECTION).
+2. Location Staging Motifs: Incorporate these culturally/geographically appropriate visual elements: ${geoVisualCues}.
+3. Spatial Composition: Enforce the 1:1 square format. Reiterate that the main subject is on the ${zoneMandate.subjectSide}, and the ${zoneMandate.emptyZone} is clean, uncluttered empty negative space.
+4. Lighting & Atmosphere: Cinematic soft diffused lighting, warm natural sunlight, casting elegant soft shadows, keeping the light clean and natural without any colored neon filters or saunas.
+5. Color Scheme: Dominated by elegant neutral tones (warm cream, soft beige, or travertine stone) with high-fashion accents of the brand base color (${baseColorDesc}) and accent color (${accentColorDesc}) integrated strictly as localized highlights.
+6. Style & Mood: Modern, sophisticated, high-end visual design, premium luxury look.
 
 CRITICAL TEXT-FREE & HALLUCINATION NEGATIVE CONSTRAINTS:
 1. The generated prompt MUST be completely text-free. Never use any literal words in quotes, letters, or words inside the prompt description.

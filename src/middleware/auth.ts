@@ -40,7 +40,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = authHeader.slice(7);
   const secret = process.env.JWT_SECRET || 'fallback-secret';
   const isDevFallback =
-    process.env.NODE_ENV === 'development' && secret === 'fallback-secret';
+    (process.env.NODE_ENV as string) === 'development' && secret === 'fallback-secret';
 
   try {
     const decoded = jwt.verify(token, secret) as any;

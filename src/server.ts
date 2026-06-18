@@ -393,12 +393,16 @@ app.post(
   asyncHandler(async (req: Request, res: Response) => {
     const startTime = Date.now();
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
 
     console.log(`[API] Starting content generation for campaign: ${campaignId}`);
 
     // Guard: reject if already generating
     const campaign = await prisma.socialCampaign
-      .findUnique({ where: { id: campaignId }, select: { id: true, status: true } })
+      .findFirst({
+        where: { id: campaignId, userId },
+        select: { id: true, status: true },
+      })
       .catch(() => null);
 
     if (!campaign) {
@@ -587,7 +591,17 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
     console.log(`[API] Fetching pipeline run status for campaign: ${campaignId}`);
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     const run = await prisma.pipelineRun.findUnique({
       where: { campaignId },
@@ -619,7 +633,17 @@ app.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId, stageName } = req.params;
     const { outputJson } = req.body;
+    const userId = (req as any).user?.id;
     console.log(`[API] Applying manual override to stage ${stageName} for campaign: ${campaignId}`);
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     const run = await prisma.pipelineRun.findUnique({ where: { campaignId } });
     if (!run) {
@@ -647,7 +671,17 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
     console.log(`[API] Triggering resumption of campaign pipeline run: ${campaignId}`);
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     const run = await prisma.pipelineRun.findUnique({ where: { campaignId } });
     if (!run) {
@@ -682,8 +716,18 @@ app.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
     const { date } = req.query;
+    const userId = (req as any).user?.id;
 
     console.log(`[API] Fetching posts for campaign: ${campaignId}${date ? ` on ${date}` : ''}`);
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     let posts: any[];
 
@@ -733,8 +777,18 @@ app.put(
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
     const updates = req.body;
+    const userId = (req as any).user?.id;
 
     console.log(`[API] Editing post: ${postId}`);
+
+    // Verify ownership
+    const postExists = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
+      select: { id: true },
+    });
+    if (!postExists) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Post not found', 404);
+    }
 
     if (!updates || Object.keys(updates).length === 0) {
       throw new AppError(
@@ -800,8 +854,12 @@ app.post(
       `[API] Regenerating post: ${postId} (caption:${regenerateCaption} prompt:${regeneratePrompt} image:${regenerateImage} feedback:${actualFeedback ? actualFeedback.substring(0, 30) + '...' : 'none'} templateStyle:${templateStyle || 'none'})`
     );
 
+    const userId = (req as any).user?.id;
     // Fetch post (no token debit — image regeneration is free; only new manual posts consume tokens)
-    const post = await prisma.socialPost.findUnique({ where: { id: postId }, select: { campaignId: true } });
+    const post = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
+      select: { campaignId: true },
+    });
     if (!post) throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Post not found: ${postId}`, 404, { postId });
 
     try {
@@ -845,8 +903,18 @@ app.delete(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
 
     console.log(`[API] Deleting post: ${postId}`);
+
+    // Verify ownership
+    const postExists = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
+      select: { id: true },
+    });
+    if (!postExists) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Post not found: ${postId}`, 404, { postId });
+    }
 
     try {
       await deletePostService(postId);
@@ -918,7 +986,11 @@ app.post(
     console.log(`[API] Generating image on-demand for post: ${postId} (disableHtml: ${disableHtml}, templateStyle: ${resolvedStyle}, layoutTypeOverride: ${layoutTypeOverride})`);
 
     try {
-      const post = await prisma.socialPost.findUnique({ where: { id: postId }, select: { campaignId: true } });
+      const userId = (req as any).user?.id;
+      const post = await prisma.socialPost.findFirst({
+        where: { id: postId, campaign: { userId } },
+        select: { campaignId: true },
+      });
       if (!post) throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, `Post not found: ${postId}`, 404, { postId });
 
       // Import on-demand service
@@ -967,6 +1039,7 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postIds } = req.body;
+    const userId = (req as any).user?.id;
     const startTime = Date.now();
 
     if (!Array.isArray(postIds) || postIds.length === 0) {
@@ -974,6 +1047,21 @@ app.post(
         ApiErrorCode.INVALID_INPUT,
         'Request body must include "postIds" array with at least one post ID',
         400
+      );
+    }
+
+    // Verify ownership of all posts in batch
+    const count = await prisma.socialPost.count({
+      where: {
+        id: { in: postIds },
+        campaign: { userId }
+      }
+    });
+    if (count !== postIds.length) {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        'One or more posts not found or unauthorized',
+        403
       );
     }
 
@@ -1034,13 +1122,17 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
     const startTime = Date.now();
 
     console.log(`[API] Generating video on-demand for post: ${postId}`);
 
-    // Fetch contentType to decide routing
+    // Fetch contentType to decide routing and verify ownership
     const post = await prisma.socialPost
-      .findUnique({ where: { id: postId }, select: { contentType: true, campaignId: true, imageGenerated: true } })
+      .findFirst({
+        where: { id: postId, campaign: { userId } },
+        select: { contentType: true, campaignId: true, imageGenerated: true }
+      })
       .catch(() => null);
 
     if (!post) {
@@ -1096,6 +1188,7 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postIds } = req.body;
+    const userId = (req as any).user?.id;
     const startTime = Date.now();
 
     if (!Array.isArray(postIds) || postIds.length === 0) {
@@ -1103,6 +1196,21 @@ app.post(
         ApiErrorCode.INVALID_INPUT,
         'Request body must include "postIds" array with at least one post ID',
         400
+      );
+    }
+
+    // Verify ownership of all posts in batch
+    const count = await prisma.socialPost.count({
+      where: {
+        id: { in: postIds },
+        campaign: { userId }
+      }
+    });
+    if (count !== postIds.length) {
+      throw new AppError(
+        ApiErrorCode.INVALID_INPUT,
+        'One or more posts not found or unauthorized',
+        403
       );
     }
 
@@ -1156,8 +1264,12 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
 
-    const campaign = await prisma.socialCampaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
     if (!campaign) {
       return res.json({
         success: true,
@@ -1244,8 +1356,9 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
-    const campaign = await prisma.socialCampaign.findUniqueOrThrow({
-      where: { id: campaignId },
+    const userId = (req as any).user?.id;
+    const campaign = await prisma.socialCampaign.findFirstOrThrow({
+      where: { id: campaignId, userId },
       include: { strategy: true, _count: { select: { posts: true } } },
     });
 
@@ -1380,9 +1493,10 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
 
-    const existing = await prisma.socialPost.findUnique({
-      where: { id: postId },
+    const existing = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
     });
 
     if (!existing) {
@@ -1446,9 +1560,10 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
 
-    const post = await prisma.socialPost.findUnique({
-      where: { id: postId },
+    const post = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
       select: { id: true, campaignId: true, platform: true, status: true },
     });
 
@@ -1516,9 +1631,10 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
 
-    const existing = await prisma.socialPost.findUnique({
-      where: { id: postId },
+    const existing = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
       select: { status: true },
     });
 
@@ -1560,6 +1676,16 @@ app.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
     const { date, pillar, topic, isFestival, festivalName } = req.body;
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     if (!date) {
       throw new AppError(
@@ -1703,6 +1829,17 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
+
     const calendar = await getCalendarGrouped(campaignId);
 
     res.json({
@@ -1726,6 +1863,17 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId, date } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
+
     const posts = await getPostsByDate(campaignId, date);
 
     res.json({
@@ -1751,6 +1899,16 @@ app.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId, date } = req.params;
     const { pillar, topic, platform, contentType, scheduledTime } = req.body ?? {};
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     try {
       const post = await generateAiPostForDate(campaignId, date, { pillar, topic, platform, contentType, scheduledTime });
@@ -1794,6 +1952,16 @@ app.post(
   upload.single('image'),
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId, date } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     const platform = req.body?.platform as string | undefined;
     if (!platform) {
@@ -1873,6 +2041,17 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify ownership
+    const post = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
+      select: { id: true }
+    });
+    if (!post) {
+      throw new AppError(ApiErrorCode.POST_NOT_FOUND, 'Post not found', 404);
+    }
+
     const logs = await getPublishLogsForPost(postId);
 
     res.json({
@@ -1895,9 +2074,10 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = (req as any).user?.id;
 
-    const existing = await prisma.socialPost.findUnique({
-      where: { id: postId },
+    const existing = await prisma.socialPost.findFirst({
+      where: { id: postId, campaign: { userId } },
       select: { status: true },
     });
 
@@ -1939,6 +2119,16 @@ app.get(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaign = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaign) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     const posts = await prisma.socialPost.findMany({
       where: { campaignId, status: 'FAILED' },
@@ -1970,6 +2160,16 @@ app.post(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { campaignId } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify campaign ownership
+    const campaignExists = await prisma.socialCampaign.findFirst({
+      where: { id: campaignId, userId },
+      select: { id: true }
+    });
+    if (!campaignExists) {
+      throw new AppError(ApiErrorCode.CAMPAIGN_NOT_FOUND, 'Campaign not found', 404);
+    }
 
     const cacheKey = `campaign-summary:${campaignId}`;
     const force = req.body?.force === true;
