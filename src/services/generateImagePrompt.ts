@@ -8,6 +8,11 @@ import { CalendarItem, Strategy } from '../types/content';
 import { NormalizedInput } from './normalizeInput';
 import { callLlm } from '../utils/llmClient';
 import { getFriendlyColorName, getGeographyVisualCues } from './audienceClassifier';
+const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
+const isOpenAiDisabled =
+  process.env.OPENAI_DISABLED === 'true' ||
+  process.env.AI_DISABLED === 'true' ||
+  !hasOpenAiKey;
 
 /**
  * Specifies WHERE in the image the AI should leave empty negative space
@@ -25,6 +30,30 @@ export type NegativeSpaceZone =
   | 'top_band'
   | 'bottom_band'
   | 'center_clear';
+=======
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
+const isOpenAiDisabled =
+  process.env.OPENAI_DISABLED === 'true' ||
+  process.env.AI_DISABLED === 'true' ||
+  !hasOpenAiKey;
+
+const isQuotaError = (error: unknown): boolean => {
+  const err = error as {
+    code?: string;
+    status?: number;
+    message?: string;
+    error?: { code?: string };
+  };
+  return (
+    err?.code === 'insufficient_quota' ||
+    err?.error?.code === 'insufficient_quota' ||
+    (err?.status === 429 &&
+      typeof err?.message === 'string' &&
+      err.message.includes('insufficient_quota'))
+  );
+};
+>>>>>>> 22abb9d (cation update)
 
 export async function generateDetailedImagePrompt(
   calendarItem: CalendarItem,
@@ -34,6 +63,10 @@ export async function generateDetailedImagePrompt(
   preferredLayout?: string,
   negativeSpaceZone?: NegativeSpaceZone
 ): Promise<string> {
+  if (isOpenAiDisabled) {
+    return generateFallbackPrompt(calendarItem, normalized);
+  }
+
   try {
     const prompt = await callOpenAI(calendarItem, strategy, normalized, feedback, preferredLayout, negativeSpaceZone);
     if (prompt.length < 100) throw new Error('Generated prompt too short');
@@ -42,37 +75,15 @@ export async function generateDetailedImagePrompt(
   } catch (error: any) {
     console.error(`[ImagePrompt] Prompt generation failed: ${error.message}. Returning fallback.`);
     return generateFallbackPrompt(calendarItem, normalized);
-  }
-}
-
-async function callOpenAI(
-  item: CalendarItem,
-  strategy: Strategy,
-  normalized: NormalizedInput,
-  feedback?: string,
-  preferredLayout?: string,
-  negativeSpaceZone?: NegativeSpaceZone
-): Promise<string> {
-  const baseColorDesc = getFriendlyColorName(normalized.base_color);
-  const accentColorDesc = getFriendlyColorName(normalized.accent_color);
-  const geoVisualCues = getGeographyVisualCues(normalized.geography);
-
-  let feedbackSection = '';
-  if (feedback) {
-    feedbackSection = `\nUSER FEEDBACK / DIRECTIONS (You MUST follow these specific instructions and modify the background scene prompt based on them):\n"${feedback}"\n`;
+=======
+  if (isOpenAiDisabled) {
+    return generateFallbackPrompt(calendarItem, normalized);
   }
 
-  // Choose visual direction based on industry and topic
-  const indLower = normalized.industry.toLowerCase();
-  const topicLower = item.topic.toLowerCase();
-
-  // Determine if we should generate a human lifestyle scene or a product/pedestal showcase.
-  // We prefer lifestyle (humans) for B2B/services/education/corporate, and also for D2C/B2C when the topic is lifestyle, community, trust, success, learning, or review-focused.
-  // We prefer product staging when it's a physical product brand (skincare, cosmetics, food) and the topic is specifically about the product packaging, active ingredients, or product showcase.
-  const productKeywords = [
-    'cosmetics', 'skincare', 'perfume', 'beverage', 'food', 'snack', 'clothing', 'fashion',
-    'apparel', 'furniture', 'jewelry', 'packaging', 'soap', 'shampoo', 'physical product', 'd2c product'
-  ];
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const prompt = await callOpenAI(calendarItem, strategy, normalized);
+      if (prompt.length < 100) throw new Error('Generated prompt too short');
   const isPhysicalBrand = productKeywords.some(kw => indLower.includes(kw));
   
   // If it is a physical brand but the topic is community, trust, lifestyle, thank you, review, or unlock potential, we still want a human lifestyle shot!
