@@ -72,31 +72,36 @@ export async function generateDetailedImagePrompt(
   );
 
   // Zone-specific spatial mandate text (used in both lifestyle and product directions)
-  const zoneSpatialMandate: Record<NegativeSpaceZone, { subjectSide: string; emptyZone: string; emptyDesc: string }> = {
+  const zoneSpatialMandate: Record<NegativeSpaceZone, { subjectSide: string; emptyZone: string; emptyDesc: string; bodyNegative: string }> = {
     left_column: {
-      subjectSide: 'RIGHT 50%',
-      emptyZone: 'LEFT 50%',
+      subjectSide: 'RIGHT 55% (rightmost half of the frame only)',
+      emptyZone: 'LEFT 45%',
       emptyDesc: 'a simple plain flat wall, quiet empty smooth room partition, or neutral clean studio backdrop',
+      bodyNegative: 'CRITICAL: Absolutely NO part of any human body — including head, face, shoulders, arms, hands, or legs — may appear in the LEFT 45% of the frame. The leftmost 45% is reserved exclusively for an empty wall/backdrop. Any person must be fully contained within the rightmost 55%, with their head and shoulders well inside the right half.',
     },
     right_column: {
-      subjectSide: 'LEFT 50%',
-      emptyZone: 'RIGHT 50%',
+      subjectSide: 'LEFT 55% (leftmost half of the frame only)',
+      emptyZone: 'RIGHT 45%',
       emptyDesc: 'a simple plain flat wall or neutral clean studio backdrop on the right side',
+      bodyNegative: 'CRITICAL: Absolutely NO part of any human body — including head, face, shoulders, arms, hands, or legs — may appear in the RIGHT 45% of the frame. The rightmost 45% is reserved exclusively for an empty wall/backdrop.',
     },
     top_band: {
       subjectSide: 'BOTTOM 60%',
       emptyZone: 'TOP 40%',
       emptyDesc: 'a clean open sky, soft ceiling, or neutral overhead backdrop',
+      bodyNegative: 'CRITICAL: Absolutely NO part of any human body — no heads, faces, raised arms, or torsos — may appear in the TOP 40% of the frame. All people must be fully below the midpoint of the image.',
     },
     bottom_band: {
       subjectSide: 'TOP 60%',
       emptyZone: 'BOTTOM 40%',
       emptyDesc: 'a clean empty floor, soft ground plane, or neutral lower backdrop',
+      bodyNegative: 'CRITICAL: Absolutely NO part of any human body — no legs, feet, or seated lower halves — may appear in the BOTTOM 40% of the frame. All people must be fully in the upper portion of the image.',
     },
     center_clear: {
       subjectSide: 'OUTER EDGES (left and right thirds)',
       emptyZone: 'CENTER THIRD',
       emptyDesc: 'a clean, open, uncluttered center zone with no subjects, props, or details',
+      bodyNegative: 'CRITICAL: Absolutely NO part of any human body may appear in the CENTER THIRD of the frame. All subjects must be pushed to the outer left and right edges of the composition.',
     },
   };
 
@@ -117,9 +122,12 @@ export async function generateDetailedImagePrompt(
   if (needLifestyle) {
     visualDirectionStr = `VISUAL DIRECTION: HIGH-END LIFESTYLE PHOTOGRAPHY (Human-centric)
 - The image MUST be a premium, high-quality, photorealistic photograph featuring real people.
-- Main subject: ${ethnicity} people representing the target audience (e.g. students studying, young professionals collaborating, a customer using the service/product, or a smiling person at a desk) matching the post topic: "${item.topic}".
-- SPATIAL SPLIT MANDATE (CRITICAL FOR TEXT OVERLAY): All human subjects, laptops, props, furniture, plants, windows, and detailed active elements MUST be placed strictly on the ${zoneMandate.subjectSide} of the frame.
-- NEGATIVE SPACE MANDATE (ABS-PROPRIETARY): The entire ${zoneMandate.emptyZone} of the frame MUST be completely blank, empty, clean, flat, uncluttered, and neutral negative space (e.g., ${zoneMandate.emptyDesc} in the brand base color: ${baseColorDesc}). There must be absolutely no furniture, no lamps, no TV, no windows, no plants, and no decorations in the ${zoneMandate.emptyZone} of the image. The composition must transition from a clean, blank empty surface in the ${zoneMandate.emptyZone} to active subjects in the ${zoneMandate.subjectSide}.`;
+- Main subject: ${ethnicity} people representing the target audience matching the post topic: "${item.topic}".
+- SHOT FRAMING MANDATE (CRITICAL): Shoot the scene as a WIDE-ANGLE ROOM-SCALE PHOTOGRAPH. The camera must be placed far enough from the subject that the ENTIRE PERSON — from head to feet — is visible within the frame. Think of it as a furniture/interior magazine spread where you see the whole room and the person in it. Acceptable framings: full-length standing portrait, 3/4 body shot showing head to knee, wide-room lifestyle shot. FORBIDDEN framings: desk-level close-up showing only hands/arms/torso, tight crop of laptop keyboard, any composition where the person's head is out of frame or cut off at the top.
+- SPATIAL SPLIT MANDATE (CRITICAL FOR TEXT OVERLAY): All human subjects, laptops, props, furniture, plants, windows, and detailed active elements MUST be placed strictly on the ${zoneMandate.subjectSide} of the frame. The full silhouette of the person — including their head and face — must be entirely within ${zoneMandate.subjectSide}.
+- BODY CLEARANCE MANDATE — ABSOLUTE RULE: ${zoneMandate.bodyNegative}
+- NEGATIVE SPACE MANDATE (ABS-PROPRIETARY): The entire ${zoneMandate.emptyZone} of the frame MUST be completely blank, empty, clean, flat, uncluttered, and neutral negative space (e.g., ${zoneMandate.emptyDesc} in the brand base color: ${baseColorDesc}). There must be absolutely no furniture, no lamps, no TV, no windows, no plants, and no decorations in the ${zoneMandate.emptyZone} of the image. The composition must transition from a clean, blank empty surface in the ${zoneMandate.emptyZone} to active subjects in the ${zoneMandate.subjectSide}.
+- FLUX NEGATIVE PROMPT (APPEND TO END OF GENERATED PROMPT): End the prompt with this exact sentence: "Negative: cropped, partial body, headless figure, no face visible, desk-level angle, extreme close-up of hands, cut-off head, torso only, disembodied limbs, missing head."`;
   } else {
     visualDirectionStr = `VISUAL DIRECTION: PREMIUM STAGED PRODUCT SHOWCASE (Product-centric)
 - The image MUST be a professional product showcase with premium staged product packaging or containers on an elegant minimalist surface or pedestal.
@@ -157,12 +165,13 @@ Tone: ${strategy.tone}
 ${feedbackSection}
 
 Generate a comprehensive visual prompt (150-300 words) covering:
-1. Main Visual Concept & Subject: Describe the main scene (lifestyle of people or staged product showcase based on the VISUAL DIRECTION).
+1. Main Visual Concept & Subject: Describe the main scene. MANDATORY: describe the camera as placed far from the subject — a wide room-scale shot. The person must be shown HEAD-TO-TOE or at minimum HEAD-TO-WAIST with their face clearly visible. Describe the room/studio layout, not just the desk surface. Examples of correct framing: "A young professional sitting at a minimal desk in the corner of a bright airy studio, photographed from across the room, full body visible". NEVER describe only hands on keyboard, NEVER describe a close-up of a desk surface.
 2. Location Staging Motifs: Incorporate these culturally/geographically appropriate visual elements: ${geoVisualCues}.
-3. Spatial Composition: Enforce the 1:1 square format. Reiterate that the main subject is on the ${zoneMandate.subjectSide}, and the ${zoneMandate.emptyZone} is clean, uncluttered empty negative space.
+3. Spatial Composition: Enforce the 1:1 square format. The main subject (with clearly visible head/face) is entirely on the ${zoneMandate.subjectSide}. The ${zoneMandate.emptyZone} is a clean, uncluttered empty wall/backdrop with ZERO body parts or furniture intruding.
 4. Lighting & Atmosphere: Cinematic soft diffused lighting, warm natural sunlight, casting elegant soft shadows, keeping the light clean and natural without any colored neon filters or saunas.
 5. Color Scheme: Dominated by elegant neutral tones (warm cream, soft beige, or travertine stone) with high-fashion accents of the brand base color (${baseColorDesc}) and accent color (${accentColorDesc}) integrated strictly as localized highlights.
 6. Style & Mood: Modern, sophisticated, high-end visual design, premium luxury look.
+7. End the prompt with this exact negative constraint sentence: "Negative: cropped body, headless figure, no visible face, desk-level angle, extreme close-up of hands only, missing head, disembodied limbs, partial torso only."
 
 CRITICAL TEXT-FREE & HALLUCINATION NEGATIVE CONSTRAINTS:
 1. The generated prompt MUST be completely text-free. Never use any literal words in quotes, letters, or words inside the prompt description.

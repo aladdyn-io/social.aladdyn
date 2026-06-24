@@ -63,6 +63,9 @@ export interface ContentInput {
 
   /** Content format weights mix (e.g., photo, reel, story) */
   contentMix?: any;
+
+  /** Optional brand/company name */
+  company_name?: string;
 }
 
 // ============================================================================

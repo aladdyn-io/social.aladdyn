@@ -421,6 +421,15 @@ export async function renderAdComposite({
     const bp = layoutBlueprint || {};
     const slideIdx = slideIndex !== undefined ? slideIndex : 0;
 
+    const resolvedLogo = brandLogoUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60';
+    const resolvedBrandName = brandName || 'Aladdyn Social';
+
+    if (bp.dynamicHtmlBlock) {
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock
+        .replace(/\$\$BRAND_LOGO\$\$/g, resolvedLogo)
+        .replace(/\$\$BRAND_NAME\$\$/g, resolvedBrandName);
+    }
+
     // Enforce CTA max length — truncate to 5 words + arrow if the LLM wrote a full sentence
     const truncateCta = (text: string): string => {
       const stripped = text.replace(/\s*[→➜»>]+\s*$/, '').trim();
@@ -557,13 +566,21 @@ export async function renderAdComposite({
     }
 
     
-    // Sanitize dynamicHtmlBlock to prevent nested single/double quotes around font names from breaking the HTML attribute boundary
+    // Sanitize dynamicHtmlBlock to ensure single quotes around font names for browser compatibility
     if (bp.dynamicHtmlBlock) {
       bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
         /font-family:\s*['"\\/]*([^'";\\/]+)['"\\/]*/gi,
-        "font-family: $1"
+        "font-family: '$1'"
       );
       logger.info('Sanitized font-family single/double quotes. Preserved all custom LLM color layouts, opacities, and styling gradients.');
+
+      // Strip emoji characters from HTML text nodes (safety net for LLM hallucinations)
+      // Targets Unicode emoji ranges while preserving all HTML tags, CSS, and special chars
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /[\u{1F300}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FEFF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}\u{1F100}-\u{1F1FF}\u{1F200}-\u{1F2FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}]/gu,
+        ''
+      );
+
 
       // Fallback: Replace data-doodle placeholders with inline SVGs in case the LLM outputs placeholders instead of raw SVGs
       const { DOODLES } = require('./svgDoodles');
@@ -617,6 +634,41 @@ export async function renderAdComposite({
         );
         logger.info('Normalized dynamicHtmlBlock placement for non-editorial layout.');
       }
+    }
+
+    // Post-process: Strip the right border from editorial_column panels (fixes white line seam)
+    // The right edge of the gradient panel renders as a hard 1px visible line.
+    // For editorial layouts, remove border-right entirely and ensure the gradient fades cleanly.
+    if (bp.dynamicHtmlBlock && layoutType === 'editorial_column') {
+      // 1. Strip ALL borders from root div (any form) — eliminates the visible white seam line
+      //    Covers: border: 1px solid var(--card-border), border: 1px solid rgba(...), etc.
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /border:\s*[^;]+;/gi,
+        'border: none;'
+      );
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /border-right:\s*[^;]+;/gi,
+        'border-right: none;'
+      );
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /border-left:\s*[^;]+;/gi,
+        'border-left: none;'
+      );
+
+      // 2. Normalise padding: 60px → 44px 40px (fixes cramped compressed layout)
+      //    60px padding on a 45% panel eats 120px, leaving only ~366px. This restores ~420px.
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /padding:\s*60px\s*;/gi,
+        'padding: 44px 40px;'
+      );
+
+      // 3. Widen 45%/46% root containers to 50% (more breathing room without touching the bg image)
+      bp.dynamicHtmlBlock = bp.dynamicHtmlBlock.replace(
+        /width:\s*4[56]%/i,
+        'width: 50%'
+      );
+
+      logger.info('Editorial layout: stripped borders, normalised padding (60px→44px 40px), widened panel (45%→50%).');
     }
 
     // Post-process: Strip glassmorphism styles from dynamicHtmlBlock when requireGlassmorphism is false
@@ -731,11 +783,6 @@ export async function renderAdComposite({
         logger.info(`[htmlRenderer] dynamicHtmlBlock validated (${trimmed.length} chars) — using LLM-generated HTML.`);
       }
     }
-    
-    const resolvedLogo = brandLogoUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=80&auto=format&fit=crop&q=60';
-    const resolvedBrandName = brandName || 'Aladdyn Social';
-
-
 
     // Editorial full-height side columns template
     if (layoutType === 'editorial_column') {
@@ -746,10 +793,10 @@ export async function renderAdComposite({
       if (isLeftBleed) {
         const isRightAligned = quad.includes('right');
         const gradDir = isRightAligned ? 'to left' : 'to right';
-        containerClass = `h-full max-w-[540px] p-16 flex flex-col justify-between transition-all duration-300 ${isRightAligned ? 'border-l' : 'border-r'}`;
+        containerClass = `h-full max-w-[560px] p-16 flex flex-col justify-between transition-all duration-300`;
         containerStyle = `background: linear-gradient(${gradDir}, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(255, 255, 255, 0.8) 60%, rgba(255, 255, 255, 0) 100%); border: none !important; box-shadow: none !important;`;
       } else {
-        containerClass = `h-full max-w-[500px] ${padding} flex flex-col gap-8 shadow-2xl transition-all duration-300 ${quad.includes('right') ? 'border-l' : 'border-r'}`;
+        containerClass = `h-full max-w-[520px] ${padding} flex flex-col gap-8 shadow-2xl transition-all duration-300`;
         containerStyle = `background-color: ${finalBgColor}; border-color: rgba(${colors.isDarkBg ? '255,255,255' : '15,23,42'}, 0.12); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);`;
       }
     }
@@ -1170,6 +1217,14 @@ export async function renderAdComposite({
                     ${bp.dynamicHtmlBlock ? bp.dynamicHtmlBlock : `
           <!-- Dynamic Design Backplate -->
           <div class="${containerClass}" style="${containerStyle}">
+            <!-- Brand Header Overlay -->
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+              <img src="${resolvedLogo}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(${colors.isDarkBg ? '255,255,255' : '15,23,42'}, 0.15);" />
+              <span style="font-size: 11px; font-weight: 700; color: ${finalSubtitleColor}; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'Plus Jakarta Sans', sans-serif;">
+                ${resolvedBrandName}
+              </span>
+            </div>
+
             <!-- Ad Headline -->
             <h1 class="ad-headline ${headlineFontClass}" style="color: ${finalTextColor}; ${headlineSizeStyle}">
               ${headline}
@@ -1263,6 +1318,13 @@ export async function renderAdComposite({
       </html>
     `;
 
+    try {
+      require('fs').writeFileSync(require('path').resolve(__dirname, 'temp_render.html'), htmlContent);
+      logger.info('✓ Saved temp_render.html for diagnostics.');
+    } catch (e: any) {
+      logger.warn(`Failed to save temp_render.html: ${e.message}`);
+    }
+
     // 4. Ingest and render HTML page contents
     await page.setContent(htmlContent, { timeout: 10000, waitUntil: 'domcontentloaded' });
 
@@ -1292,6 +1354,24 @@ export async function renderAdComposite({
       }
       return new Promise(resolve => setTimeout(resolve, 300));
     });
+
+    // Ensure all images (especially external brand logos) are fully loaded before screenshot
+    try {
+      await page.evaluate(async () => {
+        const doc = (globalThis as any).document;
+        const images = Array.from(doc.querySelectorAll('img')) as any[];
+        await Promise.all(images.map((img: any) => {
+          if (img.complete) return;
+          return new Promise((resolve) => {
+            img.addEventListener('load', resolve);
+            img.addEventListener('error', resolve);
+          });
+        }));
+      });
+      logger.info('All images in the composite are fully loaded.');
+    } catch (imgError: any) {
+      logger.warn(`Failed waiting for images to load: ${imgError.message}`);
+    }
 
     // 5. Take full page viewport composite screenshot
     const finalAdBuffer = await page.screenshot({

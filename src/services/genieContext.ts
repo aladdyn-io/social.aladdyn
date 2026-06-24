@@ -17,6 +17,9 @@ export interface GenieContext {
   tone?: string;
   websiteUrl?: string;
   websiteSummary: string; // compiled text from scraped content
+  brandColor?: string | null;
+  brandAccentColor?: string | null;
+  brandLogo?: string | null;
 }
 
 /**

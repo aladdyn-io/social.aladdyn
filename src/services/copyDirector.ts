@@ -54,43 +54,45 @@ MANDATORY INTENT-SPECIFIC ELEMENTS:
    - You MUST include at least 1-2 "statistic" elements with clear numeric 'value' fields (e.g. '40%', '3x', '10,000+') and descriptive labels in 'text' (e.g. 'Reduction in Fine Lines', 'Faster Execution Time').
    - You MUST include 1 "badge" and 1 "cta" element.
 4. If the post intent is EDUCATIONAL or How-To:
-   - You MUST generate 3-5 "feature" elements representing a numbered sequence of steps (e.g. "Step 1: Cleanse your skin...", "Step 2: Hydrate...").
+   - You MUST generate EXACTLY 2 "feature" elements representing the 2 most important steps (e.g. "Step 1: Cleanse your skin...", "Step 2: Hydrate..."). DO NOT generate 3, 4, or 5 steps — only the top 2.
    - You MUST include 1 "badge" and 1 "cta" element.
 5. If the post intent is PRODUCT_HIGHLIGHT or promotional:
-   - You MUST generate 3-5 "feature" elements highlighting active ingredients, product qualities, or benefits (full descriptive sentences, 15-30 words).
+   - You MUST generate EXACTLY 2 "feature" elements highlighting the 2 strongest product qualities or benefits (full descriptive sentences, 12-20 words each). DO NOT generate 3, 4, or 5 features — only the top 2.
    - You MUST include at least 1 "badge" and 1 "cta" element.
 
 MANDATORY RICHNESS RULES:
-1. primaryHeadline: 3-7 words, bold and punchy. Can be split across 2 lines for drama.
-2. secondarySubtitle: 1-2 sentences that expand on the headline with a clear value proposition.
+1. primaryHeadline: 3-6 words, bold and punchy.
+2. secondarySubtitle: EXACTLY 1 short sentence (max 18 words). Do NOT write 2 sentences.
 3. elements array:
-   - For COMPARISON, EDUCATIONAL, and PRODUCT_HIGHLIGHT intents: Array MUST contain 5-8 items, including at least 3-5 "feature" items (full descriptive sentences of 15-30 words each) and exactly 1 "cta".
-   - For TESTIMONIAL intent: Array MUST contain exactly 4-6 items: 1 "quote", 1 customer name "badge", 1 stars "badge", 1 "cta", and optional 1-2 trust "badge" items. Absolutely no "feature" or "statistic" items.
-   - For STATISTIC intent: Array MUST contain 4-6 items: 1-2 "statistic" items, 1-2 "badge" items, and exactly 1 "cta".
-4. Feature text (when applicable) should be FULL SENTENCES. E.g. "Cleanse with a gentle face wash to remove overnight impurities and prep your skin for the day."
+   - For COMPARISON intent: 5-8 items including 3-5 "feature" pairs and 1 "cta".
+   - For EDUCATIONAL and PRODUCT_HIGHLIGHT intents: EXACTLY 4 items — 1 "badge", 2 "feature" items, 1 "cta". No more, no less.
+   - For TESTIMONIAL intent: exactly 4-6 items: 1 "quote", 1 customer name "badge", 1 stars "badge", 1 "cta", optional 1-2 trust "badge" items. No "feature" or "statistic" items.
+   - For STATISTIC intent: 4 items: 1-2 "statistic" items, 1 "badge", 1 "cta".
+4. Feature text (when applicable) should be full sentences of 12-20 words. Keep them concise — these render as bullet points in a narrow column.
 5. Badge text should be SHORT (2-4 words). E.g. "Cruelty Free", "Clean Ingredients"
 
 OUTPUT FLEXIBILITY:
 Write copy that aligns perfectly with the intent — for EDUCATIONAL posts use numbered steps, for PRODUCT_HIGHLIGHT use ingredient callouts, for TESTIMONIAL use a quote block and customer name.
 
+NO EMOJI RULE (ABSOLUTE): Do NOT use any emoji characters anywhere in any text field. No 🚀, no 🖥️, no ✨, no 🌱, no 📊, no icons. The icon/iconName fields are for Lucide vector icons only — never use emoji characters as icon substitutes in text strings.
+
 REQUIRED OUTPUT FORMAT (Return ONLY valid JSON):
 {
   "intent": "Identify the core intent (e.g., EDUCATIONAL, COMPARISON, TESTIMONIAL, PROMOTIONAL, PRODUCT_HIGHLIGHT)",
-  "primaryHeadline": "A 3-7 word powerful headline",
-  "secondarySubtitle": "A 1-2 sentence compelling subheadline with clear value proposition",
+  "primaryHeadline": "A 3-6 word powerful headline. NO EMOJIS.",
+  "secondarySubtitle": "Exactly 1 short sentence. NO EMOJIS.",
   "elements": [
     {
       "type": "feature | quote | statistic | badge | paragraph | cta",
-      "text": "The actual text — full sentences for features, short labels for badges. FOR CTA TYPE: MAXIMUM 5 WORDS. Examples: 'Shop Now', 'Try It Today', 'Get Started →', 'Book Free Demo'. Never write a full sentence as a CTA.",
-      "icon": "A relevant emoji (optional, use sparingly)",
-      "iconName": "A Lucide icon name. Choose from: shield-check, zap, brain, heart, star, award, target, trending-up, clock, users, globe, sparkles, check-circle, flask-conical, leaf, sun, eye, lock, rocket, bar-chart-2, palette, gem, crown, thumbs-up, lightbulb, microscope, droplets, wind, flame, layers",
+      "text": "The actual text — full sentences for features, short labels for badges. FOR CTA TYPE: MAXIMUM 5 WORDS. Examples: 'Shop Now', 'Try It Today', 'Get Started', 'Book Free Demo'. Never write a full sentence as a CTA. NO EMOJIS IN TEXT.",
+      "iconName": "A Lucide icon name only (no emoji). Choose from: shield-check, zap, brain, heart, star, award, target, trending-up, clock, users, globe, sparkles, check-circle, flask-conical, leaf, sun, eye, lock, rocket, bar-chart-2, palette, gem, crown, thumbs-up, lightbulb, microscope, droplets, wind, flame, layers",
       "value": "For statistics only: the big number like '40%' or '100+' or '3x'",
-      "isNegative": "Boolean. True ONLY if this highlights a negative trait (e.g. 'No parabens'). False otherwise."
+      "isNegative": "Boolean. True ONLY if this highlights a negative trait. False otherwise."
     }
   ]
 }
 
-CRITICAL: Return ONLY the JSON object. No markdown backticks, no prose. The elements array MUST satisfy the rules above.`;
+CRITICAL: Return ONLY the JSON object. No markdown backticks, no prose. The elements array MUST satisfy the rules above. ABSOLUTELY NO EMOJI CHARACTERS ANYWHERE IN THE JSON.`;
 
   try {
     const response = await callLlm({
@@ -114,6 +116,23 @@ CRITICAL: Return ONLY the JSON object. No markdown backticks, no prose. The elem
     raw = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     
     const blueprint = JSON.parse(raw) as CopyBlueprint;
+
+    // ── Programmatic emoji strip (safety net) ──────────────────────────────
+    // LLMs frequently ignore "no emoji" instructions. Strip all emoji
+    // Unicode characters from every text field before returning.
+    const stripEmoji = (str: string): string =>
+      str.replace(/[\u{1F300}-\u{1FFFF}|\u{2600}-\u{27BF}|\u{FE00}-\u{FEFF}|\u{1F000}-\u{1F02F}|\u{1F0A0}-\u{1F0FF}|\u{1F100}-\u{1F1FF}|\u{1F200}-\u{1F2FF}|\u{1F900}-\u{1F9FF}|\u{1FA00}-\u{1FA6F}|\u{1FA70}-\u{1FAFF}]/gu, '').trim();
+
+    blueprint.primaryHeadline = stripEmoji(blueprint.primaryHeadline);
+    if (blueprint.secondarySubtitle) blueprint.secondarySubtitle = stripEmoji(blueprint.secondarySubtitle);
+    blueprint.elements = blueprint.elements.map(el => ({
+      ...el,
+      text: el.text ? stripEmoji(el.text) : el.text,
+      value: el.value ? stripEmoji(el.value) : el.value,
+      icon: undefined, // always drop the icon emoji field
+    }));
+    // ──────────────────────────────────────────────────────────────────────
+
     logger.info(`✓ Successfully extracted copy blueprint: ${blueprint.primaryHeadline}`);
     return blueprint;
 

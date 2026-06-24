@@ -123,17 +123,17 @@ export async function generateLayoutBlueprint(params: {
   // We provide full-height columns or full-width rows so the Master Container can breathe.
   // NOTE: height is capped at calc(100% - 70px) to avoid overlapping the persistent footer bar.
   const allCoordinates: Record<string, string> = {
-    top_left: 'style="position: absolute; top: 0; left: 0; width: 45%; max-width: 600px; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start;"',
-    top_center: 'style="position: absolute; top: 0; left: 0; width: 100%; height: 45%; max-height: 540px; padding: 60px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;"',
-    top_right: 'style="position: absolute; top: 0; right: 0; width: 45%; max-width: 600px; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end;"',
+    top_left: 'style="position: absolute; top: 0; left: 0; width: 50%; max-width: 600px; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start;"',
+    top_center: 'style="position: absolute; top: 0; left: 0; width: 100%; height: 45%; max-height: 540px; padding: 44px 40px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center;"',
+    top_right: 'style="position: absolute; top: 0; right: 0; width: 50%; max-width: 600px; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-end;"',
     
-    middle_left: 'style="position: absolute; top: 0; left: 0; width: 45%; max-width: 600px; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;"',
-    middle_center: 'style="position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center;"',
-    middle_right: 'style="position: absolute; top: 0; right: 0; width: 45%; max-width: 600px; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: center; align-items: flex-end;"',
+    middle_left: 'style="position: absolute; top: 0; left: 0; width: 50%; max-width: 600px; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;"',
+    middle_center: 'style="position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: center; align-items: center;"',
+    middle_right: 'style="position: absolute; top: 0; right: 0; width: 50%; max-width: 600px; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: center; align-items: flex-end;"',
     
-    bottom_left: 'style="position: absolute; top: 0; left: 0; width: 45%; max-width: 600px; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start;"',
-    bottom_center: 'style="position: absolute; bottom: 70px; left: 0; width: 100%; height: 45%; max-height: 540px; padding: 60px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;"',
-    bottom_right: 'style="position: absolute; top: 0; right: 0; width: 45%; max-width: 600px; height: calc(100% - 70px); padding: 60px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end;"'
+    bottom_left: 'style="position: absolute; top: 0; left: 0; width: 50%; max-width: 600px; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start;"',
+    bottom_center: 'style="position: absolute; bottom: 70px; left: 0; width: 100%; height: 45%; max-height: 540px; padding: 44px 40px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;"',
+    bottom_right: 'style="position: absolute; top: 0; right: 0; width: 50%; max-width: 600px; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end;"'
   };
 
   let allowedCoordinatesStr = '';
@@ -255,6 +255,11 @@ ${allowedCoordinatesStr}
 AVAILABLE COMPONENTS (MIX, MATCH, AND ADAPT BASED ON THE ARCHETYPE):
 
 1. HEADER BLOCK:
+   - Brand Logo & Name Header (always place this first inside the card container):
+     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+       <img src="$$BRAND_LOGO$$" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+       <span style="font-size: 11px; font-weight: 700; color: var(--subtitle-color); text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Plus Jakarta Sans', sans-serif;">$$BRAND_NAME$$</span>
+     </div>
    - Badge: <span class="ad-badge">INDUSTRY · TOPIC</span>
    - Headline: <h1 class="ad-headline" style="font-family:'Lora',serif;">Word <span class="text-brand-accent">Highlight</span> <i data-lucide="sparkles" class="text-brand-accent" style="width:24px;height:24px;vertical-align:middle;display:inline-block;"></i></h1>
    - Subtitle: <p class="ad-subtitle">Sentence description here.</p><span data-doodle="scribbleUnderline" data-doodle-color="var(--accent-color)"></span>
@@ -300,7 +305,9 @@ RULES:
 - The right 54% of the canvas is the background image scene — do NOT place elements there.
 - The bottom 70px is reserved for the persistent brand footer — do NOT place elements there.
 - Use Tailwind utility classes freely. Do NOT use Tailwind text-size classes (text-sm, text-lg etc).
-- Render ALL elements from the CopyBlueprint — every feature, badge, statistic, and quote.
+- CONTENT HIERARCHY LAW — PRIORITIZE BREATHING ROOM OVER COMPLETENESS: Do NOT blindly render every single element from the CopyBlueprint. Social ads are NOT brochures. Select only the most impactful elements. The hierarchy is: Brand Header → Badge → Headline → 1 short subtitle sentence → max 2 bullet/step items (NOT 3, NOT 4) → CTA. If the CopyBlueprint has 3+ bullets/steps, pick the best 2 and discard the rest. Leave generous whitespace between elements — at least 16px gap between sections. A sparse, well-spaced layout always outperforms a cramped one.
+- For editorial_left_bleed specifically: headline font-size must NOT exceed 2.2rem (override with inline style if needed). Body copy must be 1 sentence maximum (14-16px). Max 2 numbered steps or checklist items. Generous gap between all elements (gap: 14px minimum).
+- Brand Logo & Name Header: You MUST prepend the Brand Logo & Name Header template (using exact strings '$$BRAND_LOGO$$' and '$$BRAND_NAME$$') at the very top inside the card container.
 - CRITICAL TESTIMONIAL RULE: If the CopyBlueprint contains a "quote" element (or is a TESTIMONIAL intent), you MUST render it as a floating speech-bubble review card using the 'bubble-speech' class. Inside this card, display 5 gold stars (★★★★★) colored in var(--accent-color), the review quote text in elegant italic quotes using var(--headline-color), and the customer name/attribution text (prefixed with "— ") in var(--subtitle-color). This card must be rendered beautifully with good padding, looking like a premium floating social proof block. Failing to display the customer review is a critical design failure.
 - The dynamicHtmlBlock must be a single root <div>. Escape all double quotes with \\\\ inside the JSON.
 
@@ -344,7 +351,7 @@ Output ONLY a valid JSON object matching the LayoutBlueprint schema:
   "ctaIconStyle": "none" | "inline" | "circular_arrow",
   "useScriptHighlight": boolean,
   "typographyZIndex": "behind" | "in_front",
-  "dynamicHtmlBlock": "<div style=\\"position: absolute; top: 0; left: 0; width: 46%; height: calc(100% - 70px); padding: 52px 48px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; background: var(--card-bg); border: 1px solid var(--card-border);\\">...[HTML with CSS variables and all elements]...</div>"
+  "dynamicHtmlBlock": "<div style=\\"position: absolute; top: 0; left: 0; width: 50%; height: calc(100% - 70px); padding: 44px 40px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; background: var(--card-bg); border: none;\\">...[HTML with CSS variables, max 2 bullets, generous gaps]...</div>"
 }
 Output ONLY the raw JSON object.`;
 

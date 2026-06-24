@@ -267,6 +267,7 @@ app.post(
           contentMix: { photo: 4, reel: 2, carousel: 2, story: 1, written: 2 },
           industry: input.industry,
           geography: input.geography || 'India',
+          companyName: input.company_name || undefined,
           companyDesc: undefined,
           brandLogo: input.logo_url || undefined,
           brandColor: input.base_color || undefined,
@@ -281,6 +282,31 @@ app.post(
       // Initialize token ledger for this campaign (3 free tokens)
       const { initializeCampaignTokens } = await import('./services/tokenService');
       await initializeCampaignTokens(campaignId);
+
+      // ── Brand Enrichment: Persist Genie brand data to campaign row ─────────
+      // If the frontend didn't supply logo/colors/name (or supplied defaults),
+      // fetch from Genie now and write to the campaign so all future image
+      // generation passes have persistent branding without a live Genie call.
+      if (funnelId && funnelId !== 'direct') {
+        try {
+          const { fetchGenieContext } = await import('./services/genieContext');
+          const genieCtx = await fetchGenieContext(funnelId);
+          if (genieCtx) {
+            const enrichment: Record<string, string> = {};
+            if (!input.logo_url && genieCtx.brandLogo)                          enrichment.brandLogo    = genieCtx.brandLogo;
+            if (!input.company_name && genieCtx.companyName)                    enrichment.companyName  = genieCtx.companyName;
+            if ((!input.base_color   || input.base_color   === '#764ba2') && genieCtx.brandColor)       enrichment.brandColor   = genieCtx.brandColor;
+            if ((!input.accent_color || input.accent_color === '#667eea')  && genieCtx.brandAccentColor) enrichment.accentColor  = genieCtx.brandAccentColor;
+            if (Object.keys(enrichment).length > 0) {
+              await prisma.socialCampaign.update({ where: { id: campaignId }, data: enrichment });
+              console.log(`[API] ✓ Campaign enriched with Genie brand data:`, enrichment);
+            }
+          }
+        } catch (genieErr: any) {
+          console.warn(`[API] Genie brand enrichment failed (non-fatal): ${genieErr?.message}`);
+        }
+      }
+      // ──────────────────────────────────────────────────────────────────────
 
       const output = await runContentPipeline(input, campaignId, funnelId);
 
@@ -1805,6 +1831,9 @@ app.get(
         tone: genieCtx?.tone ?? null,
         websiteUrl: genieCtx?.websiteUrl ?? null,
         websiteSummary: genieCtx?.websiteSummary ?? null,
+        brandColor: genieCtx?.brandColor ?? null,
+        brandAccentColor: genieCtx?.brandAccentColor ?? null,
+        brandLogo: genieCtx?.brandLogo ?? null,
         // Fixed campaign defaults
         total_days: 30,
         frequency_per_week: 4,

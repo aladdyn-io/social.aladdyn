@@ -1,5 +1,10 @@
 # Implementation Plan: Video Generation
 
+> **Status as of June 2026:** Phases 1–4 complete. Phases 5–11 in progress. See task checkboxes below.
+>
+> Completed: DB schema, MIME-type storage fix, KlingVideoGenerator client, video prompt generation, PostItem type extension.
+> Pending: generatePosts routing, DB persistence, onDemandVideoGeneration orchestration, BullMQ queue/worker, API endpoints, property tests.
+
 ## Overview
 
 Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` and `story` post slots using the Kling AI REST API. The implementation follows the dependency order: DB schema first, then storage fix, then the Kling client, then prompt generation, then pipeline integration, then persistence, then the orchestration service, then the BullMQ queue/worker, then API endpoints, and finally property-based tests for all nine correctness properties.
@@ -78,7 +83,7 @@ Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` 
   - [x] 5.1 Add `videoPrompt?: string` to the `PostItem` interface in `types/content.ts`
     - Add optional field `videoPrompt?: string` to `PostItem`
     - _Requirements: 7.4_
-  - [-] 5.2 Route `reel`/`story` slots to `generateDetailedVideoPrompt` in `generatePosts.ts`
+  - [ ] 5.2 Route `reel`/`story` slots to `generateDetailedVideoPrompt` in `generatePosts.ts`
     - Import `generateDetailedVideoPrompt` from `./generateVideoPrompt`
     - For each `CalendarItem`, detect `isVideo = ['reel', 'story'].includes(entry.content_type)`
     - In the parallel `Promise.all` block, add `isVideo ? generateDetailedVideoPrompt(...) : Promise.resolve(undefined)` as the third promise
@@ -98,11 +103,11 @@ Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` 
     - Mock Prisma; assert `videoPrompt` is passed through when present and `null` when absent
     - _Requirements: 7.3_
 
-- [~] 7. Checkpoint — Ensure all tests pass
+- [ ] 7. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 8. Implement `onDemandVideoGeneration.ts`
-  - [~] 8.1 Implement `deriveVideoConfig(platform, contentType)` with `PLATFORM_VIDEO_CONFIGS` lookup
+  - [ ] 8.1 Implement `deriveVideoConfig(platform, contentType)` with `PLATFORM_VIDEO_CONFIGS` lookup
     - Define `PLATFORM_VIDEO_CONFIGS` constant for instagram/linkedin/whatsapp × reel/story
     - Define `DEFAULT_VIDEO_CONFIG: VideoConfig = { aspectRatio: '9:16', duration: '5', modelName: 'kling-v1', mode: 'std' }`
     - `deriveVideoConfig` returns the matching entry or `DEFAULT_VIDEO_CONFIG`; never returns `undefined` or `null`
@@ -118,7 +123,7 @@ Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` 
     - Use `fast-check` to generate arbitrary `platform` and `contentType` strings
     - Assert `deriveVideoConfig(p, c)` always returns an object with all four fields (`aspectRatio`, `duration`, `modelName`, `mode`) defined and non-null
     - **Validates: Requirements 3.1, 3.2, 3.3**
-  - [~] 8.4 Implement `generatePostVideo(postId, force?)` orchestration
+  - [ ] 8.4 Implement `generatePostVideo(postId, force?)` orchestration
     - Fetch post from DB; throw `AppError` (404) if not found; throw `AppError` (400) if `contentType` is not `reel`/`story`
     - Short-circuit if `post.imageUrl && post.imageGenerated && !force`
     - Call `deriveVideoConfig`, use `post.videoPrompt` or call `generateDetailedVideoPrompt()` on-the-fly
@@ -143,19 +148,19 @@ Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` 
     - On success path: assert Prisma update is called with `mediaType: 'video'` and `isFallback` not set to `true`
     - On fallback path: assert Prisma update is called with `mediaType: 'image'` and `isFallback: true`
     - **Validates: Requirements 7.1, 5.3**
-  - [~] 8.8 Implement `generatePostVideos(postIds)` batch function
+  - [ ] 8.8 Implement `generatePostVideos(postIds)` batch function
     - Iterate `postIds` sequentially (not in parallel) using a `for...of` loop
     - Catch per-post errors and record them in the result map without aborting the batch
     - Return `Map<string, { success: boolean; videoUrl?: string; error?: string }>`
     - _Requirements: 5.4_
 
 - [ ] 9. Add `videoGenQueue` and `videoGenWorker`
-  - [~] 9.1 Add `VIDEO_GEN` queue to `src/jobs/queues.ts`
+  - [ ] 9.1 Add `VIDEO_GEN` queue to `src/jobs/queues.ts`
     - Add `VIDEO_GEN: 'social-video-gen'` to `QUEUE_NAMES`
     - Export `videoGenQueue` with `attempts: 2`, `backoff: { type: 'fixed', delay: 10_000 }`, `removeOnComplete: { count: 200 }`, `removeOnFail: { count: 100 }`
     - Export `VideoGenJobData` interface: `{ postId: string }`
     - _Requirements: 8.1, 8.2, 8.3_
-  - [~] 9.2 Create `src/jobs/workers/videoGenWorker.ts`
+  - [ ] 9.2 Create `src/jobs/workers/videoGenWorker.ts`
     - Mirror `imageGenWorker.ts` structure
     - Worker calls `generatePostVideo(data.postId)`
     - On failure, update `post.publishError` with the error message before rethrowing so BullMQ can retry
@@ -166,12 +171,12 @@ Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` 
     - _Requirements: 8.4_
 
 - [ ] 10. Add API endpoints to `src/server.ts`
-  - [~] 10.1 Implement `POST /api/v1/posts/:postId/generate-video`
+  - [ ] 10.1 Implement `POST /api/v1/posts/:postId/generate-video`
     - Fetch `contentType` from DB; return 404 if post not found; return 503 if DB pool unavailable
     - Route to `generatePostVideo(postId, true)` for `reel`/`story`, else `generatePostImage(postId, false, true)`
     - Return `{ success: true, data: { postId, videoUrl, message, generatedAt } }`
     - _Requirements: 9.1, 9.3, 9.4_
-  - [~] 10.2 Implement `POST /api/v1/posts/generate-videos/batch`
+  - [ ] 10.2 Implement `POST /api/v1/posts/generate-videos/batch`
     - Accept `{ postIds: string[] }` in request body
     - Call `generatePostVideos(postIds)` and map results to array
     - Return `{ success: true, data: { results } }`
@@ -183,7 +188,7 @@ Extend the Social Aladdyn pipeline to generate short-form MP4 videos for `reel` 
     - Test batch endpoint returns per-post results
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-- [~] 11. Final checkpoint — Ensure all tests pass
+- [ ] 11. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

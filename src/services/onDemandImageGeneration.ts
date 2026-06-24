@@ -179,6 +179,7 @@ export async function generatePostImage(
         companyDesc: true,
         tone: true,
         goal: true,
+        funnelId: true,
         strategy: {
           select: {
             contentPillars: true,
@@ -191,10 +192,40 @@ export async function generatePostImage(
       }
     });
 
-    const brandLogoUrl = campaign?.brandLogo || '';
-    const brandName = campaign?.companyName || campaign?.name || campaign?.industry || 'Aladdyn Social';
+    let brandLogoUrl = campaign?.brandLogo || '';
+    let brandName = campaign?.companyName || '';
+    let resolvedBrandColor = campaign?.brandColor || '#764ba2';
+    let resolvedAccentColor = campaign?.accentColor || '#667eea';
 
-    logger.info(`Campaign branding context loaded. Logo: ${brandLogoUrl || 'None'}, Brand Name: ${brandName}`);
+    // Fallback: If campaign has empty/null branding info or defaults, fetch live genie context for funnel
+    if (campaign?.funnelId && (!brandLogoUrl || !brandName || resolvedBrandColor === '#764ba2' || resolvedAccentColor === '#667eea')) {
+      try {
+        const { fetchGenieContext } = await import('./genieContext');
+        const genieCtx = await fetchGenieContext(campaign.funnelId);
+        if (genieCtx) {
+          if (!brandLogoUrl && genieCtx.brandLogo) {
+            brandLogoUrl = genieCtx.brandLogo;
+          }
+          if (!brandName && genieCtx.companyName) {
+            brandName = genieCtx.companyName;
+          }
+          if (resolvedBrandColor === '#764ba2' && genieCtx.brandColor) {
+            resolvedBrandColor = genieCtx.brandColor;
+          }
+          if (resolvedAccentColor === '#667eea' && genieCtx.brandAccentColor) {
+            resolvedAccentColor = genieCtx.brandAccentColor;
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`Failed to fetch fallback genie context: ${err.message}`);
+      }
+    }
+
+    if (!brandName) {
+      brandName = campaign?.name || campaign?.industry || 'Aladdyn Social';
+    }
+
+    logger.info(`Campaign branding context loaded. Logo: ${brandLogoUrl || 'None'}, Brand Name: ${brandName}, Brand Color: ${resolvedBrandColor}, Accent Color: ${resolvedAccentColor}`);
 
     // PRE-PASS: Run Copy Director & Layout Director early so the HTML layout is planned first
     // and strictly dictates the negative space zone for background image generation.
@@ -367,29 +398,29 @@ export async function generatePostImage(
     // Run Saliency Grid & Mask occupancy verification checks (CV Collision Gate)
     let cvGatePassed = true;
     let cvGateReason = '';
+    let zoneScore = 0;
     try {
       const baseSaliency = await analyzeImageSaliency(baseImageResult.imageBuffer);
-      let zoneScore = 0;
       if (plannedZone === 'left_column') {
-        zoneScore = ((baseSaliency.quadrantScores.top_left || 0) + 
-                     (baseSaliency.quadrantScores.middle_left || 0) + 
+        zoneScore = ((baseSaliency.quadrantScores.top_left || 0) +
+                     (baseSaliency.quadrantScores.middle_left || 0) +
                      (baseSaliency.quadrantScores.bottom_left || 0)) / 3;
       } else if (plannedZone === 'right_column') {
-        zoneScore = ((baseSaliency.quadrantScores.top_right || 0) + 
-                     (baseSaliency.quadrantScores.middle_right || 0) + 
+        zoneScore = ((baseSaliency.quadrantScores.top_right || 0) +
+                     (baseSaliency.quadrantScores.middle_right || 0) +
                      (baseSaliency.quadrantScores.bottom_right || 0)) / 3;
       } else if (plannedZone === 'top_band') {
-        zoneScore = ((baseSaliency.quadrantScores.top_left || 0) + 
-                     (baseSaliency.quadrantScores.top_center || 0) + 
+        zoneScore = ((baseSaliency.quadrantScores.top_left || 0) +
+                     (baseSaliency.quadrantScores.top_center || 0) +
                      (baseSaliency.quadrantScores.top_right || 0)) / 3;
       } else if (plannedZone === 'bottom_band') {
-        zoneScore = ((baseSaliency.quadrantScores.bottom_left || 0) + 
-                     (baseSaliency.quadrantScores.bottom_center || 0) + 
+        zoneScore = ((baseSaliency.quadrantScores.bottom_left || 0) +
+                     (baseSaliency.quadrantScores.bottom_center || 0) +
                      (baseSaliency.quadrantScores.bottom_right || 0)) / 3;
       } else if (plannedZone === 'center_clear') {
         zoneScore = baseSaliency.quadrantScores.center || 0;
       }
-      
+
       logger.info(`CV Gate Saliency Verification: Planned Zone '${plannedZone}' score is ${zoneScore.toFixed(3)}`);
       if (zoneScore > 0.32) {
         cvGatePassed = false;
@@ -399,12 +430,55 @@ export async function generatePostImage(
       logger.warn(`Saliency CV verification failed: ${e.message}`);
     }
 
-    if (!qualityResult.passed || !cvGatePassed) {
-      const reasonStr = !qualityResult.passed 
-        ? `Quality Gate failed: [${qualityResult.reasons.join(', ')}]`
-        : `CV Collision Gate failed: ${cvGateReason}`;
-      logger.warn(`${reasonStr}. (Re-rolls are disabled to prevent token wastage, continuing to composite safely using micro-contrast shields.)`);
+    // ── CV Emergency Re-roll ────────────────────────────────────────────────
+    // If saliency is CATASTROPHICALLY high (>0.70) in the planned empty zone,
+    // fire exactly ONE re-roll with an emergency body-clearance prefix injected
+    // directly into the prompt. This prevents the half-body cutoff issue where
+    // a human subject bleeds into the text overlay area (e.g. saliency 0.947).
+    if (!cvGatePassed && zoneScore > 0.70) {
+      logger.warn(`CV Collision Gate CRITICAL: zone saliency=${zoneScore.toFixed(3)} — triggering emergency single re-roll with body-clearance override.`);
+      try {
+        const zoneBodyOverrides: Record<string, string> = {
+          left_column:   'EMERGENCY SPATIAL OVERRIDE: The leftmost 45% of the image MUST be a completely empty, featureless wall or plain backdrop. NO human body parts whatsoever — no head, no face, no shoulders, no arms, no legs — may appear in the left 45%. The person/subject MUST be entirely within the rightmost 55%, shot from far enough away that their full silhouette including head is visible and well inside the right side. Wide establishing shot only.',
+          right_column:  'EMERGENCY SPATIAL OVERRIDE: The rightmost 45% of the image MUST be a completely empty, featureless wall or plain backdrop. NO human body parts whatsoever may appear in the right 45%. The person/subject MUST be entirely within the leftmost 55%.',
+          top_band:      'EMERGENCY SPATIAL OVERRIDE: The top 40% of the image MUST be a completely empty, featureless sky or ceiling. NO human body parts — no raised arms, no head, no face — may appear in the top 40%. All people must be in the bottom 60%.',
+          bottom_band:   'EMERGENCY SPATIAL OVERRIDE: The bottom 40% of the image MUST be a completely empty, featureless floor. NO human legs, feet, or lower body may appear in the bottom 40%.',
+          center_clear:  'EMERGENCY SPATIAL OVERRIDE: The center third of the image MUST be completely empty and featureless. NO human body parts may appear in the center third.',
+        };
+        const emergencyPrefix = zoneBodyOverrides[plannedZone] || zoneBodyOverrides['left_column'];
+        const emergencyPrompt = `${emergencyPrefix}\n\n${post.imagePrompt}`;
+        logger.info(`Re-rolling with emergency override prompt (${emergencyPrompt.length} chars)...`);
+        const rerollResult = await generateImageFromPrompt(emergencyPrompt);
+        // Verify the re-roll improved things
+        const rerollSaliency = await analyzeImageSaliency(rerollResult.imageBuffer);
+        let rerollZoneScore = 0;
+        if (plannedZone === 'left_column') {
+          rerollZoneScore = ((rerollSaliency.quadrantScores.top_left || 0) +
+                             (rerollSaliency.quadrantScores.middle_left || 0) +
+                             (rerollSaliency.quadrantScores.bottom_left || 0)) / 3;
+        } else if (plannedZone === 'right_column') {
+          rerollZoneScore = ((rerollSaliency.quadrantScores.top_right || 0) +
+                             (rerollSaliency.quadrantScores.middle_right || 0) +
+                             (rerollSaliency.quadrantScores.bottom_right || 0)) / 3;
+        } else {
+          rerollZoneScore = zoneScore; // keep original for other zones
+        }
+        logger.info(`Re-roll CV Gate score: ${rerollZoneScore.toFixed(3)} (was ${zoneScore.toFixed(3)})`);
+        if (rerollZoneScore < zoneScore) {
+          // Re-roll improved things — use it
+          baseImageResult = rerollResult;
+          logger.info(`✓ Emergency re-roll accepted (score improved: ${zoneScore.toFixed(3)} → ${rerollZoneScore.toFixed(3)})`);
+          if (rerollZoneScore <= 0.32) cvGatePassed = true;
+        } else {
+          logger.warn(`Emergency re-roll did not improve zone saliency (${rerollZoneScore.toFixed(3)} >= ${zoneScore.toFixed(3)}). Continuing with original.`);
+        }
+      } catch (rerollErr: any) {
+        logger.error(`Emergency re-roll failed: ${rerollErr.message}. Continuing with original image.`);
+      }
+    } else if (!cvGatePassed) {
+      logger.warn(`CV Collision Gate failed: ${cvGateReason}. Saliency is elevated but not catastrophic — compositing with micro-contrast shields.`);
     }
+    // ──────────────────────────────────────────────────────────────────────
 
     let finalAdCreativeResult: ImageGenerationResult;
 
@@ -419,11 +493,35 @@ export async function generatePostImage(
         }
       };
     } else {
-      // STEP 3: Pure Node Subject Extraction Masking
+      // STEP 3: Subject Extraction Masking (editorial_left_bleed only)
+      // 3D Depth Sandwiching is enabled exclusively for editorial_column layouts where
+      // the subject is clearly on the right side and the text panel is on the left.
+      // This creates the premium "subject in front of text" depth illusion.
       let subjectMaskUrl: string | undefined = undefined;
       let maskBuffer: Buffer | undefined = undefined;
-      // 3D Depth Sandwiching is disabled entirely globally to protect visual layouts from glitched overlays.
-      logger.info('3D Depth Sandwiching is disabled. Skipping subject mask cutout extraction.');
+
+      const isEditorialLayout = layoutBlueprint?.layoutType === 'editorial_column';
+
+      if (isEditorialLayout) {
+        logger.info('3D Depth Sandwiching: editorial_left_bleed detected — extracting subject mask for depth effect.');
+        try {
+          const { extractSubjectMask } = await import('./subjectMasker');
+          maskBuffer = await extractSubjectMask(baseImageResult.imageBuffer);
+          logger.info(`✓ Subject mask extracted (${(maskBuffer.length / 1024).toFixed(1)} KB)`);
+
+          // Upload mask to MinIO so Playwright can load it via URL
+          const { uploadBufferToStorage } = await import('./objectStorage');
+          const maskPrefix = `masks/${postId}-${Date.now()}`;
+          subjectMaskUrl = await uploadBufferToStorage(maskBuffer, 'image/png', maskPrefix);
+          logger.info(`✓ Subject mask uploaded: ${subjectMaskUrl}`);
+        } catch (maskErr: any) {
+          logger.warn(`Subject mask extraction failed (non-fatal, continuing without depth): ${maskErr.message}`);
+          subjectMaskUrl = undefined;
+          maskBuffer = undefined;
+        }
+      } else {
+        logger.info('3D Depth Sandwiching: disabled for non-editorial layout (skipping subject mask extraction).');
+      }
 
       // STEP 4: Relative luminance localized color contrast solve for planned zone
       const chosenQuadrant = plannedZone === 'left_column' ? 'top_left' : 
@@ -438,11 +536,11 @@ export async function generatePostImage(
       if (layoutBlueprint && layoutBlueprint.dynamicHtmlBlock) {
         logger.info('Running Micro-Contrast Tuning Pass on pre-planned HTML overlay...');
         const overlayIsDarkBg = finalColorMetrics.isDarkBg;
-        const overlayHeadlineColor = campaign?.brandColor && campaign.brandColor !== '#FFFFFF' && campaign.brandColor !== '#ffffff'
-          ? campaign.brandColor
+        const overlayHeadlineColor = resolvedBrandColor && resolvedBrandColor !== '#FFFFFF' && resolvedBrandColor !== '#ffffff'
+          ? resolvedBrandColor
           : (overlayIsDarkBg ? '#FFFFFF' : '#0F172A');
         const overlaySubtitleColor = overlayIsDarkBg ? '#E2E8F0' : '#334155';
-        const overlayAccentColor = layoutBlueprint?.accentColorOverride || campaign?.accentColor || undefined;
+        const overlayAccentColor = layoutBlueprint?.accentColorOverride || resolvedAccentColor || undefined;
         
         layoutBlueprint.dynamicHtmlBlock = microTuneHtmlContrast(
           layoutBlueprint.dynamicHtmlBlock,
@@ -470,13 +568,20 @@ export async function generatePostImage(
         }
       }
 
-      // Determine final typography Z-Index programmatically to avoid sliced/clipped text
+      // Determine final typography Z-Index
       let typographyZIndex: 'behind' | 'in_front' = 'in_front'; // Safe default
       if (layoutBlueprint) {
-        // 3D Depth Sandwiching is disabled entirely globally, so typography is always in front.
-        typographyZIndex = 'in_front';
-        layoutBlueprint.typographyZIndex = 'in_front';
-        logger.info('3D Depth Sandwiching is disabled. Typography forced IN FRONT of subject.');
+        if (isEditorialLayout && subjectMaskUrl) {
+          // Depth sandwiching is active: HTML panel sits BETWEEN background and subject mask.
+          // This places the subject cutout ABOVE the text panel, creating the 3D depth effect.
+          typographyZIndex = 'behind';
+          layoutBlueprint.typographyZIndex = 'behind';
+          logger.info('3D Depth Sandwiching active: Typography set BEHIND subject mask (editorial depth effect).');
+        } else {
+          typographyZIndex = 'in_front';
+          layoutBlueprint.typographyZIndex = 'in_front';
+          logger.info('Typography forced IN FRONT of subject (no depth sandwiching).');
+        }
       }
 
       // Apply the definitive glassmorphism decider using resampled final color metrics
@@ -581,8 +686,8 @@ export async function generatePostImage(
             imagePrompt: slidePrompts[slideIdx],
             industry: campaign?.industry || 'skincare',
             services: campaign?.services || [],
-            baseColor: campaign?.brandColor || '#8B5CF6',
-            accentColor: campaign?.accentColor || undefined,
+            baseColor: resolvedBrandColor || '#8B5CF6',
+            accentColor: resolvedAccentColor || undefined,
             geography: campaign?.geography || undefined,
             safestQuadrant: slideQuadrant,
             contrastMetrics: {
@@ -619,8 +724,8 @@ export async function generatePostImage(
             width: adWidth,
             height: adHeight,
             slideIndex: slideIdx,
-            brandColor: campaign?.brandColor || undefined,
-            accentColor: campaign?.accentColor || undefined,
+            brandColor: resolvedBrandColor || undefined,
+            accentColor: resolvedAccentColor || undefined,
             geography: campaign?.geography || undefined,
             industry: campaign?.industry || undefined,
             topic: post.topic || undefined,
@@ -673,8 +778,8 @@ export async function generatePostImage(
           colors: finalColorMetrics,
           width: adWidth,
           height: adHeight,
-          brandColor: campaign?.brandColor || undefined,
-          accentColor: campaign?.accentColor || undefined,
+          brandColor: resolvedBrandColor || undefined,
+          accentColor: resolvedAccentColor || undefined,
           geography: campaign?.geography || undefined,
           industry: campaign?.industry || undefined,
           topic: post.topic || undefined,
