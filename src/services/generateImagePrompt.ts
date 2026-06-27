@@ -44,13 +44,43 @@ export async function generateDetailedImagePrompt(
     return generateFallbackPrompt(item, normalized);
   }
 
-  const topicLower = (item.topic || '').toLowerCase();
-  const indLower = (normalized.industry || '').toLowerCase();
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const prompt = await callOpenAI(calendarItem, strategy, normalized, feedback, preferredLayout, negativeSpaceZone);
+      if (prompt.length < 100) throw new Error('Generated prompt too short');
+      console.log(`[ImagePrompt] Generated ${prompt.length} char prompt for: ${calendarItem.topic}`);
+      return prompt;
+    } catch (err: any) {
+      if (attempt === 3) {
+        console.error(`[ImagePrompt] All attempts failed: ${err.message}. Returning fallback.`);
+        return generateFallbackPrompt(calendarItem, normalized);
+      }
+    }
+  }
+  return generateFallbackPrompt(calendarItem, normalized);
+}
+
+async function callOpenAI(
+  calendarItem: CalendarItem,
+  strategy: Strategy,
+  normalized: NormalizedInput,
+  feedback?: string,
+  preferredLayout?: string,
+  negativeSpaceZone?: NegativeSpaceZone
+): Promise<string> {
+  const item = calendarItem;
+  const indLower = normalized.industry.toLowerCase();
+  const topicLower = item.topic.toLowerCase();
   const baseColorDesc = getFriendlyColorName(normalized.base_color);
   const accentColorDesc = getFriendlyColorName(normalized.accent_color);
   const geoVisualCues = getGeographyVisualCues(normalized.geography);
+  const feedbackSection = feedback ? `\nFeedback from user: ${feedback}` : '';
 
-  const productKeywords = ['product', 'shop', 'store', 'e-commerce', 'retail', 'brand', 'packaging', 'bottle', 'jar', 'box', 'cream', 'cosmetic', 'serum', 'oil', 'shampoo', 'soap', 'perfume', 'supplement', 'food', 'beverage', 'drink', 'snack', 'coffee', 'tea', 'juice', 'clothing', 'apparel', 'fashion', 'jewelry', 'accessory', 'shoe', 'bag', 'watch', 'gadget', 'device', 'phone', 'laptop', 'furniture', 'decor', 'candle', 'plant', 'flower', 'gift', 'toy', 'pet'];
+  const productKeywords = [
+    'skincare', 'beauty', 'cosmetics', 'food', 'beverage', 'drink', 'bakery',
+    'product', 'retail', 'fashion', 'clothing', 'health', 'wellness', 'supplement',
+    'jewellery', 'jewelry', 'accessories', 'electronics', 'hardware', 'manufacturing',
+  ];
   const isPhysicalBrand = productKeywords.some(kw => indLower.includes(kw));
   
   // If it is a physical brand but the topic is community, trust, lifestyle, thank you, review, or unlock potential, we still want a human lifestyle shot!
@@ -133,11 +163,6 @@ export async function generateDetailedImagePrompt(
 - The image MUST be a professional product showcase with premium staged product packaging or containers on an elegant minimalist surface or pedestal.
 - SPATIAL SPLIT MANDATE (CRITICAL FOR TEXT OVERLAY): The product pedestal, packaging, staging elements, plants, and background details MUST be positioned strictly on the ${zoneMandate.subjectSide} of the frame.
 - NEGATIVE SPACE MANDATE (ABS-PROPRIETARY): The entire ${zoneMandate.emptyZone} of the frame MUST be completely blank, flat, uncluttered, neutral, and empty negative space (e.g. ${zoneMandate.emptyDesc} in the brand base color: ${baseColorDesc}). There must be absolutely no detailed props, shadows, panels, or items in the ${zoneMandate.emptyZone} of the image.`;
-  }
-
-  let feedbackSection = '';
-  if (feedback) {
-    feedbackSection = `\nUSER FEEDBACK / DIRECTIONS (You MUST follow these specific instructions and modify/refine the visual prompt according to them):\n"${feedback}"\n`;
   }
 
   const userPrompt = `Create a detailed visual prompt for an AI image generator (like FLUX or DALL-E) to produce a text-free social media background scene.

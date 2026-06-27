@@ -10,6 +10,11 @@ import axios from 'axios';
 const GENIE_URL = process.env.GENIE_SERVICE_URL ?? 'http://localhost:3004';
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || 'aladdyn-internal-secret';
 
+// Short-lived cache — deduplicates rapid repeat calls for the same funnelId
+// (e.g. multiple React hooks firing on the same page load)
+const cache = new Map<string, { value: GenieContext | null; expiresAt: number }>();
+const CACHE_TTL_MS = 30_000;
+
 export interface GenieContext {
   companyName?: string;
   industry?: string;
@@ -27,6 +32,11 @@ export interface GenieContext {
  * Falls back gracefully if genie is unreachable or has no data.
  */
 export async function fetchGenieContext(funnelId: string): Promise<GenieContext | null> {
+  const cached = cache.get(funnelId);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  let value: GenieContext | null = null;
+
   try {
     const response = await axios.get(
       `${GENIE_URL}/internal/funnel/${funnelId}/context`,
@@ -37,16 +47,16 @@ export async function fetchGenieContext(funnelId: string): Promise<GenieContext 
     );
 
     if (response.data?.success) {
-      return response.data.data as GenieContext;
+      value = response.data.data as GenieContext;
     }
-
-    return null;
   } catch (error: any) {
-    // Genie might be down or funnel has no scraped data yet — non-fatal
-    console.warn(
-      `[GenieContext] Could not fetch context for funnel ${funnelId}:`,
-      error?.message || 'Unknown error'
+    // 404 = funnel not in genie DB yet (expected before onboarding completes)
+    // Other errors = genie down or transient — all handled by returning null
+    console.debug(
+      `[GenieContext] No genie data for funnel ${funnelId}: ${error?.message ?? 'unknown'}`
     );
-    return null;
   }
+
+  cache.set(funnelId, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  return value;
 }
